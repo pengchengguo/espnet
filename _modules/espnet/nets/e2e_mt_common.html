@@ -1,0 +1,318 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>espnet.nets.e2e_mt_common &mdash; ESPnet 0.6.2 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../../../_static/jquery.js"></script>
+        <script type="text/javascript" src="../../../_static/underscore.js"></script>
+        <script type="text/javascript" src="../../../_static/doctools.js"></script>
+        <script type="text/javascript" src="../../../_static/language_data.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script async="async" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+    
+    <script type="text/javascript" src="../../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../index.html" class="icon icon-home"> ESPnet
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.6.2
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Tutorial:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../tutorial.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../docker.html">Docker</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Notebook:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebook/asr_cli.html">Speech Recognition (Recipe)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebook/asr_library.html">Speech Recognition (Library)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebook/tts_cli.html">Text-to-Speech (Recipe)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebook/pretrained.html">Pretrained Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebook/tts_realtime_demo.html">ESPnet real time E2E-TTS demonstration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../notebook/st_demo.html">ESPnet Speech Translation Demonstration</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Package Reference:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.st.html">espnet.st package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.lm.html">espnet.lm package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.tts.html">espnet.tts package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.transform.html">espnet.transform package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.bin.html">espnet.bin package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.scheduler.html">espnet.scheduler package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.utils.html">espnet.utils package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.optimizer.html">espnet.optimizer package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.nets.html">espnet.nets package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.mt.html">espnet.mt package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../_gen/espnet.asr.html">espnet.asr package</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Tool Reference:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../apis/espnet_bin.html">core tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../apis/utils_py.html">python utility tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../apis/utils_sh.html">bash utility tools</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">ESPnet</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../index.html">Module code</a> &raquo;</li>
+        
+      <li>espnet.nets.e2e_mt_common</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for espnet.nets.e2e_mt_common</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+
+<span class="c1"># Copyright 2019 Kyoto University (Hirofumi Inaguma)</span>
+<span class="c1">#  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)</span>
+
+<span class="sd">&quot;&quot;&quot;Common functions for MT.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">nltk</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+
+<div class="viewcode-block" id="ErrorCalculator"><a class="viewcode-back" href="../../../_gen/espnet.nets.html#espnet.nets.e2e_mt_common.ErrorCalculator">[docs]</a><span class="k">class</span> <span class="nc">ErrorCalculator</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate BLEU for E2E_ST and NMT models during training.</span>
+
+<span class="sd">    :param y_hats: numpy array with predicted text</span>
+<span class="sd">    :param y_pads: numpy array with true (target) text</span>
+<span class="sd">    :param char_list: vocabulary list</span>
+<span class="sd">    :param sym_space: space symbol</span>
+<span class="sd">    :param sym_pad: pad symbol</span>
+<span class="sd">    :param report_bleu: report BLUE score if True</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">char_list</span><span class="p">,</span> <span class="n">sym_space</span><span class="p">,</span> <span class="n">sym_pad</span><span class="p">,</span> <span class="n">report_bleu</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Construct an ErrorCalculator object.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">ErrorCalculator</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">char_list</span> <span class="o">=</span> <span class="n">char_list</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">space</span> <span class="o">=</span> <span class="n">sym_space</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pad</span> <span class="o">=</span> <span class="n">sym_pad</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">report_bleu</span> <span class="o">=</span> <span class="n">report_bleu</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">space</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">char_list</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">idx_space</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">char_list</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">idx_space</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span> <span class="fm">__call__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ys_hat</span><span class="p">,</span> <span class="n">ys_pad</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Calculate sentence-level BLEU score.</span>
+
+<span class="sd">        :param torch.Tensor ys_hat: prediction (batch, seqlen)</span>
+<span class="sd">        :param torch.Tensor ys_pad: reference (batch, seqlen)</span>
+<span class="sd">        :return: sentence-level BLEU score</span>
+<span class="sd">        :rtype float</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">bleu</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">report_bleu</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">bleu</span>
+
+        <span class="n">seqs_hat</span><span class="p">,</span> <span class="n">seqs_true</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">convert_to_char</span><span class="p">(</span><span class="n">ys_hat</span><span class="p">,</span> <span class="n">ys_pad</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">report_bleu</span><span class="p">:</span>
+            <span class="n">bleu</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calculate_bleu</span><span class="p">(</span><span class="n">seqs_hat</span><span class="p">,</span> <span class="n">seqs_true</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">bleu</span>
+
+<div class="viewcode-block" id="ErrorCalculator.convert_to_char"><a class="viewcode-back" href="../../../_gen/espnet.nets.html#espnet.nets.e2e_mt_common.ErrorCalculator.convert_to_char">[docs]</a>    <span class="k">def</span> <span class="nf">convert_to_char</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ys_hat</span><span class="p">,</span> <span class="n">ys_pad</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Convert index to character.</span>
+
+<span class="sd">        :param torch.Tensor seqs_hat: prediction (batch, seqlen)</span>
+<span class="sd">        :param torch.Tensor seqs_true: reference (batch, seqlen)</span>
+<span class="sd">        :return: token list of prediction</span>
+<span class="sd">        :rtype list</span>
+<span class="sd">        :return: token list of reference</span>
+<span class="sd">        :rtype list</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">seqs_hat</span><span class="p">,</span> <span class="n">seqs_true</span> <span class="o">=</span> <span class="p">[],</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">y_hat</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ys_hat</span><span class="p">):</span>
+            <span class="n">y_true</span> <span class="o">=</span> <span class="n">ys_pad</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">eos_true</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">y_true</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">eos_true</span> <span class="o">=</span> <span class="n">eos_true</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">eos_true</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">len</span><span class="p">(</span><span class="n">y_true</span><span class="p">)</span>
+            <span class="c1"># To avoid wrong lower BLEU than the one obtained from the decoding</span>
+            <span class="c1"># eos from y_true is used to mark the eos in y_hat</span>
+            <span class="c1"># because of that y_hats has not padded outs with -1.</span>
+            <span class="n">seq_hat</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">char_list</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">idx</span><span class="p">)]</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">y_hat</span><span class="p">[:</span><span class="n">eos_true</span><span class="p">]]</span>
+            <span class="n">seq_true</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">char_list</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">idx</span><span class="p">)]</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="n">y_true</span> <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">seq_hat_text</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">seq_hat</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)</span>
+            <span class="n">seq_hat_text</span> <span class="o">=</span> <span class="n">seq_hat_text</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">pad</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">)</span>
+            <span class="n">seq_true_text</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">seq_true</span><span class="p">)</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">space</span><span class="p">,</span> <span class="s1">&#39; &#39;</span><span class="p">)</span>
+            <span class="n">seqs_hat</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">seq_hat_text</span><span class="p">)</span>
+            <span class="n">seqs_true</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">seq_true_text</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">seqs_hat</span><span class="p">,</span> <span class="n">seqs_true</span></div>
+
+<div class="viewcode-block" id="ErrorCalculator.calculate_bleu"><a class="viewcode-back" href="../../../_gen/espnet.nets.html#espnet.nets.e2e_mt_common.ErrorCalculator.calculate_bleu">[docs]</a>    <span class="k">def</span> <span class="nf">calculate_bleu</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">seqs_hat</span><span class="p">,</span> <span class="n">seqs_true</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Calculate average sentence-level BLEU score.</span>
+
+<span class="sd">        :param list seqs_hat: prediction</span>
+<span class="sd">        :param list seqs_true: reference</span>
+<span class="sd">        :return: average sentence-level BLEU score</span>
+<span class="sd">        :rtype float</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">bleus</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">seq_hat_text</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">seqs_hat</span><span class="p">):</span>
+            <span class="n">seq_true_text</span> <span class="o">=</span> <span class="n">seqs_true</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">bleu</span> <span class="o">=</span> <span class="n">nltk</span><span class="o">.</span><span class="n">bleu_score</span><span class="o">.</span><span class="n">sentence_bleu</span><span class="p">([</span><span class="n">seq_true_text</span><span class="p">],</span> <span class="n">seq_hat_text</span><span class="p">)</span> <span class="o">*</span> <span class="mi">100</span>
+            <span class="n">bleus</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bleu</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">sum</span><span class="p">(</span><span class="n">bleus</span><span class="p">)</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">bleus</span><span class="p">)</span></div></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, Shinji Watanabe
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

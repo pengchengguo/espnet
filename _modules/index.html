@@ -1,0 +1,377 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Overview: module code &mdash; ESPnet 0.6.2 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../_static/jquery.js"></script>
+        <script type="text/javascript" src="../_static/underscore.js"></script>
+        <script type="text/javascript" src="../_static/doctools.js"></script>
+        <script type="text/javascript" src="../_static/language_data.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script async="async" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+    
+    <script type="text/javascript" src="../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../index.html" class="icon icon-home"> ESPnet
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.6.2
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Tutorial:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorial.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../docker.html">Docker</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Notebook:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/asr_cli.html">Speech Recognition (Recipe)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/asr_library.html">Speech Recognition (Library)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/tts_cli.html">Text-to-Speech (Recipe)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/pretrained.html">Pretrained Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/tts_realtime_demo.html">ESPnet real time E2E-TTS demonstration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../notebook/st_demo.html">ESPnet Speech Translation Demonstration</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Package Reference:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.st.html">espnet.st package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.lm.html">espnet.lm package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.tts.html">espnet.tts package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.transform.html">espnet.transform package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.bin.html">espnet.bin package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.scheduler.html">espnet.scheduler package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.utils.html">espnet.utils package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.optimizer.html">espnet.optimizer package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.nets.html">espnet.nets package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.mt.html">espnet.mt package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../_gen/espnet.asr.html">espnet.asr package</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Tool Reference:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../apis/espnet_bin.html">core tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../apis/utils_py.html">python utility tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../apis/utils_sh.html">bash utility tools</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">ESPnet</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../index.html">Docs</a> &raquo;</li>
+        
+      <li>Overview: module code</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>All modules for which code is available</h1>
+<ul><li><a href="espnet/asr/asr_mix_utils.html">espnet.asr.asr_mix_utils</a></li>
+<li><a href="espnet/asr/asr_utils.html">espnet.asr.asr_utils</a></li>
+<li><a href="espnet/asr/chainer_backend/asr.html">espnet.asr.chainer_backend.asr</a></li>
+<li><a href="espnet/asr/pytorch_backend/asr.html">espnet.asr.pytorch_backend.asr</a></li>
+<li><a href="espnet/asr/pytorch_backend/asr_init.html">espnet.asr.pytorch_backend.asr_init</a></li>
+<li><a href="espnet/asr/pytorch_backend/asr_mix.html">espnet.asr.pytorch_backend.asr_mix</a></li>
+<li><a href="espnet/asr/pytorch_backend/recog.html">espnet.asr.pytorch_backend.recog</a></li>
+<li><a href="espnet/bin/asr_enhance.html">espnet.bin.asr_enhance</a></li>
+<li><a href="espnet/bin/asr_recog.html">espnet.bin.asr_recog</a></li>
+<li><a href="espnet/bin/asr_train.html">espnet.bin.asr_train</a></li>
+<li><a href="espnet/bin/lm_train.html">espnet.bin.lm_train</a></li>
+<li><a href="espnet/bin/mt_train.html">espnet.bin.mt_train</a></li>
+<li><a href="espnet/bin/mt_trans.html">espnet.bin.mt_trans</a></li>
+<li><a href="espnet/bin/st_train.html">espnet.bin.st_train</a></li>
+<li><a href="espnet/bin/st_trans.html">espnet.bin.st_trans</a></li>
+<li><a href="espnet/bin/tts_decode.html">espnet.bin.tts_decode</a></li>
+<li><a href="espnet/bin/tts_train.html">espnet.bin.tts_train</a></li>
+<li><a href="espnet/lm/chainer_backend/extlm.html">espnet.lm.chainer_backend.extlm</a></li>
+<li><a href="espnet/lm/chainer_backend/lm.html">espnet.lm.chainer_backend.lm</a></li>
+<li><a href="espnet/lm/lm_utils.html">espnet.lm.lm_utils</a></li>
+<li><a href="espnet/lm/pytorch_backend/extlm.html">espnet.lm.pytorch_backend.extlm</a></li>
+<li><a href="espnet/lm/pytorch_backend/lm.html">espnet.lm.pytorch_backend.lm</a></li>
+<li><a href="espnet/mt/mt_utils.html">espnet.mt.mt_utils</a></li>
+<li><a href="espnet/mt/pytorch_backend/mt.html">espnet.mt.pytorch_backend.mt</a></li>
+<li><a href="espnet/nets/asr_interface.html">espnet.nets.asr_interface</a></li>
+<li><a href="espnet/nets/beam_search.html">espnet.nets.beam_search</a></li>
+<li><a href="espnet/nets/chainer_backend/asr_interface.html">espnet.nets.chainer_backend.asr_interface</a></li>
+<li><a href="espnet/nets/chainer_backend/ctc.html">espnet.nets.chainer_backend.ctc</a></li>
+<li><a href="espnet/nets/chainer_backend/deterministic_embed_id.html">espnet.nets.chainer_backend.deterministic_embed_id</a></li>
+<li><a href="espnet/nets/chainer_backend/e2e_asr.html">espnet.nets.chainer_backend.e2e_asr</a></li>
+<li><a href="espnet/nets/chainer_backend/e2e_asr_transformer.html">espnet.nets.chainer_backend.e2e_asr_transformer</a></li>
+<li><a href="espnet/nets/chainer_backend/rnn/attentions.html">espnet.nets.chainer_backend.rnn.attentions</a></li>
+<li><a href="espnet/nets/chainer_backend/rnn/decoders.html">espnet.nets.chainer_backend.rnn.decoders</a></li>
+<li><a href="espnet/nets/chainer_backend/rnn/encoders.html">espnet.nets.chainer_backend.rnn.encoders</a></li>
+<li><a href="espnet/nets/chainer_backend/rnn/training.html">espnet.nets.chainer_backend.rnn.training</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/attention.html">espnet.nets.chainer_backend.transformer.attention</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/ctc.html">espnet.nets.chainer_backend.transformer.ctc</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/decoder.html">espnet.nets.chainer_backend.transformer.decoder</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/decoder_layer.html">espnet.nets.chainer_backend.transformer.decoder_layer</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/embedding.html">espnet.nets.chainer_backend.transformer.embedding</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/encoder.html">espnet.nets.chainer_backend.transformer.encoder</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/encoder_layer.html">espnet.nets.chainer_backend.transformer.encoder_layer</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/label_smoothing_loss.html">espnet.nets.chainer_backend.transformer.label_smoothing_loss</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/layer_norm.html">espnet.nets.chainer_backend.transformer.layer_norm</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/mask.html">espnet.nets.chainer_backend.transformer.mask</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/plot.html">espnet.nets.chainer_backend.transformer.plot</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/positionwise_feed_forward.html">espnet.nets.chainer_backend.transformer.positionwise_feed_forward</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/subsampling.html">espnet.nets.chainer_backend.transformer.subsampling</a></li>
+<li><a href="espnet/nets/chainer_backend/transformer/training.html">espnet.nets.chainer_backend.transformer.training</a></li>
+<li><a href="espnet/nets/ctc_prefix_score.html">espnet.nets.ctc_prefix_score</a></li>
+<li><a href="espnet/nets/e2e_asr_common.html">espnet.nets.e2e_asr_common</a></li>
+<li><a href="espnet/nets/e2e_mt_common.html">espnet.nets.e2e_mt_common</a></li>
+<li><a href="espnet/nets/lm_interface.html">espnet.nets.lm_interface</a></li>
+<li><a href="espnet/nets/mt_interface.html">espnet.nets.mt_interface</a></li>
+<li><a href="espnet/nets/pytorch_backend/ctc.html">espnet.nets.pytorch_backend.ctc</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_asr.html">espnet.nets.pytorch_backend.e2e_asr</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_asr_mix.html">espnet.nets.pytorch_backend.e2e_asr_mix</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_asr_mulenc.html">espnet.nets.pytorch_backend.e2e_asr_mulenc</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_asr_transducer.html">espnet.nets.pytorch_backend.e2e_asr_transducer</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_asr_transformer.html">espnet.nets.pytorch_backend.e2e_asr_transformer</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_mt.html">espnet.nets.pytorch_backend.e2e_mt</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_mt_transformer.html">espnet.nets.pytorch_backend.e2e_mt_transformer</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_st.html">espnet.nets.pytorch_backend.e2e_st</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_st_transformer.html">espnet.nets.pytorch_backend.e2e_st_transformer</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_tts_fastspeech.html">espnet.nets.pytorch_backend.e2e_tts_fastspeech</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_tts_tacotron2.html">espnet.nets.pytorch_backend.e2e_tts_tacotron2</a></li>
+<li><a href="espnet/nets/pytorch_backend/e2e_tts_transformer.html">espnet.nets.pytorch_backend.e2e_tts_transformer</a></li>
+<li><a href="espnet/nets/pytorch_backend/fastspeech/duration_calculator.html">espnet.nets.pytorch_backend.fastspeech.duration_calculator</a></li>
+<li><a href="espnet/nets/pytorch_backend/fastspeech/duration_predictor.html">espnet.nets.pytorch_backend.fastspeech.duration_predictor</a></li>
+<li><a href="espnet/nets/pytorch_backend/fastspeech/length_regulator.html">espnet.nets.pytorch_backend.fastspeech.length_regulator</a></li>
+<li><a href="espnet/nets/pytorch_backend/frontends/beamformer.html">espnet.nets.pytorch_backend.frontends.beamformer</a></li>
+<li><a href="espnet/nets/pytorch_backend/frontends/dnn_beamformer.html">espnet.nets.pytorch_backend.frontends.dnn_beamformer</a></li>
+<li><a href="espnet/nets/pytorch_backend/frontends/dnn_wpe.html">espnet.nets.pytorch_backend.frontends.dnn_wpe</a></li>
+<li><a href="espnet/nets/pytorch_backend/frontends/feature_transform.html">espnet.nets.pytorch_backend.frontends.feature_transform</a></li>
+<li><a href="espnet/nets/pytorch_backend/frontends/frontend.html">espnet.nets.pytorch_backend.frontends.frontend</a></li>
+<li><a href="espnet/nets/pytorch_backend/frontends/mask_estimator.html">espnet.nets.pytorch_backend.frontends.mask_estimator</a></li>
+<li><a href="espnet/nets/pytorch_backend/initialization.html">espnet.nets.pytorch_backend.initialization</a></li>
+<li><a href="espnet/nets/pytorch_backend/lm/default.html">espnet.nets.pytorch_backend.lm.default</a></li>
+<li><a href="espnet/nets/pytorch_backend/lm/seq_rnn.html">espnet.nets.pytorch_backend.lm.seq_rnn</a></li>
+<li><a href="espnet/nets/pytorch_backend/lm/transformer.html">espnet.nets.pytorch_backend.lm.transformer</a></li>
+<li><a href="espnet/nets/pytorch_backend/nets_utils.html">espnet.nets.pytorch_backend.nets_utils</a></li>
+<li><a href="espnet/nets/pytorch_backend/rnn/attentions.html">espnet.nets.pytorch_backend.rnn.attentions</a></li>
+<li><a href="espnet/nets/pytorch_backend/rnn/decoders.html">espnet.nets.pytorch_backend.rnn.decoders</a></li>
+<li><a href="espnet/nets/pytorch_backend/rnn/encoders.html">espnet.nets.pytorch_backend.rnn.encoders</a></li>
+<li><a href="espnet/nets/pytorch_backend/streaming/segment.html">espnet.nets.pytorch_backend.streaming.segment</a></li>
+<li><a href="espnet/nets/pytorch_backend/streaming/window.html">espnet.nets.pytorch_backend.streaming.window</a></li>
+<li><a href="espnet/nets/pytorch_backend/tacotron2/cbhg.html">espnet.nets.pytorch_backend.tacotron2.cbhg</a></li>
+<li><a href="espnet/nets/pytorch_backend/tacotron2/decoder.html">espnet.nets.pytorch_backend.tacotron2.decoder</a></li>
+<li><a href="espnet/nets/pytorch_backend/tacotron2/encoder.html">espnet.nets.pytorch_backend.tacotron2.encoder</a></li>
+<li><a href="espnet/nets/pytorch_backend/transducer/initializer.html">espnet.nets.pytorch_backend.transducer.initializer</a></li>
+<li><a href="espnet/nets/pytorch_backend/transducer/loss.html">espnet.nets.pytorch_backend.transducer.loss</a></li>
+<li><a href="espnet/nets/pytorch_backend/transducer/rnn_decoders.html">espnet.nets.pytorch_backend.transducer.rnn_decoders</a></li>
+<li><a href="espnet/nets/pytorch_backend/transducer/transformer_decoder.html">espnet.nets.pytorch_backend.transducer.transformer_decoder</a></li>
+<li><a href="espnet/nets/pytorch_backend/transducer/transformer_decoder_layer.html">espnet.nets.pytorch_backend.transducer.transformer_decoder_layer</a></li>
+<li><a href="espnet/nets/pytorch_backend/transducer/utils.html">espnet.nets.pytorch_backend.transducer.utils</a></li>
+<li><a href="espnet/nets/pytorch_backend/transducer/vgg.html">espnet.nets.pytorch_backend.transducer.vgg</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/add_sos_eos.html">espnet.nets.pytorch_backend.transformer.add_sos_eos</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/attention.html">espnet.nets.pytorch_backend.transformer.attention</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/decoder.html">espnet.nets.pytorch_backend.transformer.decoder</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/decoder_layer.html">espnet.nets.pytorch_backend.transformer.decoder_layer</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/embedding.html">espnet.nets.pytorch_backend.transformer.embedding</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/encoder.html">espnet.nets.pytorch_backend.transformer.encoder</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/encoder_layer.html">espnet.nets.pytorch_backend.transformer.encoder_layer</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/initializer.html">espnet.nets.pytorch_backend.transformer.initializer</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/label_smoothing_loss.html">espnet.nets.pytorch_backend.transformer.label_smoothing_loss</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/layer_norm.html">espnet.nets.pytorch_backend.transformer.layer_norm</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/mask.html">espnet.nets.pytorch_backend.transformer.mask</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/multi_layer_conv.html">espnet.nets.pytorch_backend.transformer.multi_layer_conv</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/optimizer.html">espnet.nets.pytorch_backend.transformer.optimizer</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/plot.html">espnet.nets.pytorch_backend.transformer.plot</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/positionwise_feed_forward.html">espnet.nets.pytorch_backend.transformer.positionwise_feed_forward</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/repeat.html">espnet.nets.pytorch_backend.transformer.repeat</a></li>
+<li><a href="espnet/nets/pytorch_backend/transformer/subsampling.html">espnet.nets.pytorch_backend.transformer.subsampling</a></li>
+<li><a href="espnet/nets/pytorch_backend/wavenet.html">espnet.nets.pytorch_backend.wavenet</a></li>
+<li><a href="espnet/nets/scorer_interface.html">espnet.nets.scorer_interface</a></li>
+<li><a href="espnet/nets/scorers/ctc.html">espnet.nets.scorers.ctc</a></li>
+<li><a href="espnet/nets/scorers/length_bonus.html">espnet.nets.scorers.length_bonus</a></li>
+<li><a href="espnet/nets/st_interface.html">espnet.nets.st_interface</a></li>
+<li><a href="espnet/nets/tts_interface.html">espnet.nets.tts_interface</a></li>
+<li><a href="espnet/optimizer/chainer.html">espnet.optimizer.chainer</a></li>
+<li><a href="espnet/optimizer/factory.html">espnet.optimizer.factory</a></li>
+<li><a href="espnet/optimizer/parser.html">espnet.optimizer.parser</a></li>
+<li><a href="espnet/optimizer/pytorch.html">espnet.optimizer.pytorch</a></li>
+<li><a href="espnet/scheduler/chainer.html">espnet.scheduler.chainer</a></li>
+<li><a href="espnet/scheduler/pytorch.html">espnet.scheduler.pytorch</a></li>
+<li><a href="espnet/scheduler/scheduler.html">espnet.scheduler.scheduler</a></li>
+<li><a href="espnet/st/pytorch_backend/st.html">espnet.st.pytorch_backend.st</a></li>
+<li><a href="espnet/transform/add_deltas.html">espnet.transform.add_deltas</a></li>
+<li><a href="espnet/transform/channel_selector.html">espnet.transform.channel_selector</a></li>
+<li><a href="espnet/transform/cmvn.html">espnet.transform.cmvn</a></li>
+<li><a href="espnet/transform/functional.html">espnet.transform.functional</a></li>
+<li><a href="espnet/transform/perturb.html">espnet.transform.perturb</a></li>
+<li><a href="espnet/transform/spec_augment.html">espnet.transform.spec_augment</a></li>
+<li><a href="espnet/transform/spectrogram.html">espnet.transform.spectrogram</a></li>
+<li><a href="espnet/transform/transform_interface.html">espnet.transform.transform_interface</a></li>
+<li><a href="espnet/transform/transformation.html">espnet.transform.transformation</a></li>
+<li><a href="espnet/transform/wpe.html">espnet.transform.wpe</a></li>
+<li><a href="espnet/tts/pytorch_backend/tts.html">espnet.tts.pytorch_backend.tts</a></li>
+<li><a href="espnet/utils/check_kwargs.html">espnet.utils.check_kwargs</a></li>
+<li><a href="espnet/utils/cli_readers.html">espnet.utils.cli_readers</a></li>
+<li><a href="espnet/utils/cli_utils.html">espnet.utils.cli_utils</a></li>
+<li><a href="espnet/utils/cli_writers.html">espnet.utils.cli_writers</a></li>
+<li><a href="espnet/utils/dataset.html">espnet.utils.dataset</a></li>
+<li><a href="espnet/utils/deterministic_utils.html">espnet.utils.deterministic_utils</a></li>
+<li><a href="espnet/utils/dynamic_import.html">espnet.utils.dynamic_import</a></li>
+<li><a href="espnet/utils/fill_missing_args.html">espnet.utils.fill_missing_args</a></li>
+<li><a href="espnet/utils/io_utils.html">espnet.utils.io_utils</a></li>
+<li><a href="espnet/utils/spec_augment.html">espnet.utils.spec_augment</a></li>
+<li><a href="espnet/utils/training/batchfy.html">espnet.utils.training.batchfy</a></li>
+<li><a href="espnet/utils/training/evaluator.html">espnet.utils.training.evaluator</a></li>
+<li><a href="espnet/utils/training/iterators.html">espnet.utils.training.iterators</a></li>
+<li><a href="espnet/utils/training/tensorboard_logger.html">espnet.utils.training.tensorboard_logger</a></li>
+<li><a href="espnet/utils/training/train_utils.html">espnet.utils.training.train_utils</a></li>
+</ul>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, Shinji Watanabe
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

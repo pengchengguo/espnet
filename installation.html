@@ -1,0 +1,491 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>Installation &mdash; ESPnet 0.6.2 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+        <script type="text/javascript" src="_static/jquery.js"></script>
+        <script type="text/javascript" src="_static/underscore.js"></script>
+        <script type="text/javascript" src="_static/doctools.js"></script>
+        <script type="text/javascript" src="_static/language_data.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script async="async" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+    
+    <script type="text/javascript" src="_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Usage" href="tutorial.html" />
+    <link rel="prev" title="ESPnet: end-to-end speech processing toolkit" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="index.html" class="icon icon-home"> ESPnet
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.6.2
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Tutorial:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#requirements">Requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#supported-linux-distributions-and-other-requirements">Supported Linux distributions and other requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-1-setting-of-the-environment-for-gpu-support">Step 1) setting of the environment for GPU support</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-2-install-kaldi">Step 2) Install Kaldi</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-3-a-installation-of-espnet">Step 3-A) installation of espnet</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#using-miniconda-default">using miniconda (default)</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#using-existing-python">using existing python</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#step-3-b-installation-for-cpu-only">Step 3-B) installation for CPU-only</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#step-4-installation-check">Step 4) installation check</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="tutorial.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="docker.html">Docker</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Notebook:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="notebook/asr_cli.html">Speech Recognition (Recipe)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="notebook/asr_library.html">Speech Recognition (Library)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="notebook/tts_cli.html">Text-to-Speech (Recipe)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="notebook/pretrained.html">Pretrained Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="notebook/tts_realtime_demo.html">ESPnet real time E2E-TTS demonstration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="notebook/st_demo.html">ESPnet Speech Translation Demonstration</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Package Reference:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.st.html">espnet.st package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.lm.html">espnet.lm package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.tts.html">espnet.tts package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.transform.html">espnet.transform package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.bin.html">espnet.bin package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.scheduler.html">espnet.scheduler package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.utils.html">espnet.utils package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.optimizer.html">espnet.optimizer package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.nets.html">espnet.nets package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.mt.html">espnet.mt package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="_gen/espnet.asr.html">espnet.asr package</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Tool Reference:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="apis/espnet_bin.html">core tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="apis/utils_py.html">python utility tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="apis/utils_sh.html">bash utility tools</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">ESPnet</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="index.html">Docs</a> &raquo;</li>
+        
+      <li>Installation</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+            
+            <a href="_sources/installation.md.txt" rel="nofollow"> View page source</a>
+          
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  
+<style>
+/* CSS overrides for sphinx_rtd_theme */
+
+/* 24px margin */
+.nbinput.nblast.container,
+.nboutput.nblast.container {
+    margin-bottom: 19px;  /* padding has already 5px */
+}
+
+/* ... except between code cells! */
+.nblast.container + .nbinput.container {
+    margin-top: -19px;
+}
+
+.admonition > p:before {
+    margin-right: 4px;  /* make room for the exclamation icon */
+}
+
+/* Fix math alignment, see https://github.com/rtfd/sphinx_rtd_theme/pull/686 */
+.math {
+    text-align: unset;
+}
+</style>
+<div class="section" id="installation">
+<h1>Installation<a class="headerlink" href="#installation" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="requirements">
+<h2>Requirements<a class="headerlink" href="#requirements" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Python 3.6.1+</p></li>
+<li><p>gcc 4.9+ for PyTorch1.0.0+</p></li>
+</ul>
+<p>We often use audio converter tools in several recipes:</p>
+<ul>
+<li><p>lame (mp3 support)</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># e.g. Ubuntu</span>
+$ sudo apt-get install lame
+<span class="c1"># e.g. CentOS7: You need to register EPEL repo</span>
+$ sudo yum install lame
+</pre></div>
+</div>
+</li>
+<li><p>flac support</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># e.g. Ubuntu</span>
+$ sudo apt-get install flac
+</pre></div>
+</div>
+</li>
+<li><p>libsndfile (Soundfile)</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># e.g. Ubuntu</span>
+$ sudo apt-get install libsndfile1-dev
+<span class="c1"># e.g. CentOS</span>
+$ sudo yum install libsndfile libsndfile-devel
+</pre></div>
+</div>
+</li>
+<li><p>sox</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># e.g. Ubuntu</span>
+$ sudo apt-get install sox
+<span class="c1"># Using anaconda (If you don&#39;t have sudo privilege, the installation from conda might be useful)</span>
+$ conda install -c conda-forge sox
+</pre></div>
+</div>
+</li>
+<li><p>ffmpeg</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># e.g. Ubuntu</span>
+$ sudo apt-get install ffmpeg
+<span class="c1"># Using anaconda</span>
+$ conda install -c conda-forge ffmpeg
+</pre></div>
+</div>
+</li>
+</ul>
+<p>Optionally, GPU environment requires the following libraries:</p>
+<ul class="simple">
+<li><p>Cuda 8.0, 9.0, 9.1, 10.0 depending on each DNN library</p></li>
+<li><p>Cudnn 6+, 7+</p></li>
+<li><p>NCCL 2.0+ (for the use of multi-GPUs)</p></li>
+</ul>
+</div>
+<div class="section" id="supported-linux-distributions-and-other-requirements">
+<h2>Supported Linux distributions and other requirements<a class="headerlink" href="#supported-linux-distributions-and-other-requirements" title="Permalink to this headline">¶</a></h2>
+<p>We support the following Linux distributions with CI. If you want to build your own Linux by yourself,
+please also check our <a class="reference external" href="https://github.com/espnet/espnet/blob/master/.circleci/config.yml">CI configurations</a>.
+to prepare the appropriate environments</p>
+<ul class="simple">
+<li><p>ubuntu18</p></li>
+<li><p>ubuntu16</p></li>
+<li><p>centos7</p></li>
+<li><p>debian9</p></li>
+</ul>
+</div>
+<div class="section" id="step-1-setting-of-the-environment-for-gpu-support">
+<h2>Step 1) setting of the environment for GPU support<a class="headerlink" href="#step-1-setting-of-the-environment-for-gpu-support" title="Permalink to this headline">¶</a></h2>
+<p>To use cuda (and cudnn), make sure to set paths in your <code class="docutils literal notranslate"><span class="pre">.bashrc</span></code> or <code class="docutils literal notranslate"><span class="pre">.bash_profile</span></code> appropriately.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>CUDAROOT=/path/to/cuda
+
+export PATH=$CUDAROOT/bin:$PATH
+export LD_LIBRARY_PATH=$CUDAROOT/lib64:$LD_LIBRARY_PATH
+export CFLAGS=&quot;-I$CUDAROOT/include $CFLAGS&quot;
+export CUDA_HOME=$CUDAROOT
+export CUDA_PATH=$CUDAROOT
+</pre></div>
+</div>
+<p>If you want to use multiple GPUs, you should install <a class="reference external" href="https://developer.nvidia.com/nccl">nccl</a>
+and set paths in your <code class="docutils literal notranslate"><span class="pre">.bashrc</span></code> or <code class="docutils literal notranslate"><span class="pre">.bash_profile</span></code> appropriately, for example:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>CUDAROOT=/path/to/cuda
+NCCL_ROOT=/path/to/nccl
+
+export CPATH=$NCCL_ROOT/include:$CPATH
+export LD_LIBRARY_PATH=$NCCL_ROOT/lib/:$CUDAROOT/lib64:$LD_LIBRARY_PATH
+export LIBRARY_PATH=$NCCL_ROOT/lib/:$LIBRARY_PATH
+export CFLAGS=&quot;-I$CUDAROOT/include $CFLAGS&quot;
+export CUDA_HOME=$CUDAROOT
+export CUDA_PATH=$CUDAROOT
+</pre></div>
+</div>
+</div>
+<div class="section" id="step-2-install-kaldi">
+<h2>Step 2) Install Kaldi<a class="headerlink" href="#step-2-install-kaldi" title="Permalink to this headline">¶</a></h2>
+<p>Related links:</p>
+<ul class="simple">
+<li><p><a class="reference external" href="https://github.com/kaldi-asr/kaldi">Kaldi Github</a></p></li>
+<li><p><a class="reference external" href="https://kaldi-asr.org/">Kaldi Documentation</a></p>
+<ul>
+<li><p><a class="reference external" href="https://kaldi-asr.org/doc/install.html">Downloading and installing Kaldi</a></p></li>
+<li><p><a class="reference external" href="https://kaldi-asr.org/doc/build_setup.html">The build process (how Kaldi is compiled)</a></p></li>
+</ul>
+</li>
+<li><p><a class="reference external" href="https://github.com/kaldi-asr/kaldi/blob/master/INSTALL">Kaldi INSTALL</a></p></li>
+</ul>
+<p>Kaldi’s requirements:</p>
+<ul class="simple">
+<li><p>OS: Ubuntu, CentOS, MacOSX, Windows, Cygwin, etc.</p></li>
+<li><p>GCC &gt;= 4.7</p></li>
+</ul>
+<p>We also have <a class="reference external" href="https://github.com/espnet/espnet/blob/master/ci/install_kaldi.sh">prebuilt Kaldi binaries</a>.</p>
+<ol>
+<li><p>Git clone kaldi</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ git clone https://github.com/kaldi-asr/kaldi
+$ <span class="nb">cd</span> kaldi
+</pre></div>
+</div>
+</li>
+<li><p>Install tools</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> tools
+$ make -j &lt;NCPU&gt;
+</pre></div>
+</div>
+<ol class="simple">
+<li><p>Select BLAS library from ATLAS, OpenBLAS, or MKL</p></li>
+</ol>
+<ul class="simple">
+<li><p>OpenBLAS</p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ ./extras/install_openblas.sh
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>MKL (You need sudo privilege)</p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ sudo ./extras/install_openblas.sh
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>ATLAS (You need sudo privilege)</p></li>
+</ul>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Ubuntu</span>
+$ sudo apt-get install libatlas-base-dev
+</pre></div>
+</div>
+</li>
+<li><p>Compile Kaldi &amp; install</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> src
+<span class="c1"># ESPnet uses only feature extractor, so you can disable CUDA</span>
+$ ./configure --openblas-root<span class="o">=</span>../tools/OpenBLAS/install --use-cuda<span class="o">=</span>no
+<span class="c1"># If you&#39;ll use CUDA</span>
+<span class="c1"># ./configure --openblas-root=../tools/OpenBLAS/install --cudatk-dir=/usr/local/cuda-10.0</span>
+$ make -j clean depend<span class="p">;</span> make -j &lt;NCPU&gt;
+</pre></div>
+</div>
+</li>
+</ol>
+</div>
+<div class="section" id="step-3-a-installation-of-espnet">
+<h2>Step 3-A) installation of espnet<a class="headerlink" href="#step-3-a-installation-of-espnet" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>```bash
+$ git clone https://github.com/espnet/espnet
+$ cd espnet
+```
+</pre></div>
+</div>
+<div class="section" id="using-miniconda-default">
+<h3>using miniconda (default)<a class="headerlink" href="#using-miniconda-default" title="Permalink to this headline">¶</a></h3>
+<p>Install Python libraries and other required tools with <a class="reference external" href="https://conda.io/docs/glossary.html#miniconda-glossary">miniconda</a></p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> tools
+$ make <span class="nv">KALDI</span><span class="o">=</span>/path/to/kaldi
+</pre></div>
+</div>
+<p>You can also specify the Python (<code class="docutils literal notranslate"><span class="pre">PYTHON_VERSION</span></code> default 3.7), PyTorch (<code class="docutils literal notranslate"><span class="pre">TH_VERSION</span></code> default 1.0.0) and CUDA versions (<code class="docutils literal notranslate"><span class="pre">CUDA_VERSION</span></code> default 10.0), for example:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> tools
+$ make <span class="nv">KALDI</span><span class="o">=</span>/path/to/kaldi <span class="nv">PYTHON_VERSION</span><span class="o">=</span><span class="m">3</span>.6 <span class="nv">TH_VERSION</span><span class="o">=</span><span class="m">0</span>.4.1 <span class="nv">CUDA_VERSION</span><span class="o">=</span><span class="m">9</span>.0
+</pre></div>
+</div>
+</div>
+<div class="section" id="using-existing-python">
+<h3>using existing python<a class="headerlink" href="#using-existing-python" title="Permalink to this headline">¶</a></h3>
+<p>If you do not want to use miniconda, you need to specify your python interpreter to setup <code class="docutils literal notranslate"><span class="pre">virtualenv</span></code></p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> tools
+$ make <span class="nv">KALDI</span><span class="o">=</span>/path/to/kaldi <span class="nv">PYTHON</span><span class="o">=</span>/usr/bin/python3.6
+</pre></div>
+</div>
+</div>
+</div>
+<div class="section" id="step-3-b-installation-for-cpu-only">
+<h2>Step 3-B) installation for CPU-only<a class="headerlink" href="#step-3-b-installation-for-cpu-only" title="Permalink to this headline">¶</a></h2>
+<p>To install in a terminal that does not have a GPU installed, just clear the version of <code class="docutils literal notranslate"><span class="pre">CUPY</span></code> as follows:</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> tools
+$ make <span class="nv">KALDI</span><span class="o">=</span>/path/to/kaldi <span class="nv">CUPY_VERSION</span><span class="o">=</span><span class="s1">&#39;&#39;</span> -j <span class="m">10</span>
+</pre></div>
+</div>
+<p>This option is enabled for any of the install configuration.</p>
+</div>
+<div class="section" id="step-4-installation-check">
+<h2>Step 4) installation check<a class="headerlink" href="#step-4-installation-check" title="Permalink to this headline">¶</a></h2>
+<p>You can check whether the install is succeeded via the following commands</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> tools
+$ make check_install
+</pre></div>
+</div>
+<p>or <code class="docutils literal notranslate"><span class="pre">make</span> <span class="pre">check_install</span> <span class="pre">CUPY_VERSION=''</span></code> if you do not have a GPU on your terminal.
+If you have no warning, ready to run the recipe!</p>
+<p>If there are some problems in python libraries, you can re-setup only python environment via following commands</p>
+<div class="highlight-sh notranslate"><div class="highlight"><pre><span></span>$ <span class="nb">cd</span> tools
+$ make clean_python
+$ make python
+</pre></div>
+</div>
+</div>
+</div>
+
+
+           </div>
+           
+          </div>
+          <footer>
+  
+    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
+      
+        <a href="tutorial.html" class="btn btn-neutral float-right" title="Usage" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
+      
+      
+        <a href="index.html" class="btn btn-neutral float-left" title="ESPnet: end-to-end speech processing toolkit" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left"></span> Previous</a>
+      
+    </div>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, Shinji Watanabe
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>

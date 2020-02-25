@@ -1,0 +1,855 @@
+
+
+<!DOCTYPE html>
+<!--[if IE 8]><html class="no-js lt-ie9" lang="en" > <![endif]-->
+<!--[if gt IE 8]><!--> <html class="no-js" lang="en" > <!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <title>espnet.nets.pytorch_backend.transducer.rnn_decoders &mdash; ESPnet 0.6.2 documentation</title>
+  
+
+  
+  
+  
+  
+
+  
+  <script type="text/javascript" src="../../../../../_static/js/modernizr.min.js"></script>
+  
+    
+      <script type="text/javascript" id="documentation_options" data-url_root="../../../../../" src="../../../../../_static/documentation_options.js"></script>
+        <script type="text/javascript" src="../../../../../_static/jquery.js"></script>
+        <script type="text/javascript" src="../../../../../_static/underscore.js"></script>
+        <script type="text/javascript" src="../../../../../_static/doctools.js"></script>
+        <script type="text/javascript" src="../../../../../_static/language_data.js"></script>
+        <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+        <script async="async" type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+        <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+    
+    <script type="text/javascript" src="../../../../../_static/js/theme.js"></script>
+
+    
+
+  
+  <link rel="stylesheet" href="../../../../../_static/css/theme.css" type="text/css" />
+  <link rel="stylesheet" href="../../../../../_static/pygments.css" type="text/css" />
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav">
+
+   
+  <div class="wy-grid-for-nav">
+    
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+          
+
+          
+            <a href="../../../../../index.html" class="icon icon-home"> ESPnet
+          
+
+          
+          </a>
+
+          
+            
+            
+              <div class="version">
+                0.6.2
+              </div>
+            
+          
+
+          
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+
+          
+        </div>
+
+        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
+          
+            
+            
+              
+            
+            
+              <p class="caption"><span class="caption-text">Tutorial:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../tutorial.html">Usage</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../docker.html">Docker</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Notebook:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../notebook/asr_cli.html">Speech Recognition (Recipe)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../notebook/asr_library.html">Speech Recognition (Library)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../notebook/tts_cli.html">Text-to-Speech (Recipe)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../notebook/pretrained.html">Pretrained Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../notebook/tts_realtime_demo.html">ESPnet real time E2E-TTS demonstration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../notebook/st_demo.html">ESPnet Speech Translation Demonstration</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Package Reference:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.st.html">espnet.st package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.lm.html">espnet.lm package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.tts.html">espnet.tts package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.transform.html">espnet.transform package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.bin.html">espnet.bin package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.scheduler.html">espnet.scheduler package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.utils.html">espnet.utils package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.optimizer.html">espnet.optimizer package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.nets.html">espnet.nets package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.mt.html">espnet.mt package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../_gen/espnet.asr.html">espnet.asr package</a></li>
+</ul>
+<p class="caption"><span class="caption-text">Tool Reference:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../apis/espnet_bin.html">core tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../apis/utils_py.html">python utility tools</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../apis/utils_sh.html">bash utility tools</a></li>
+</ul>
+
+            
+          
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+
+      
+      <nav class="wy-nav-top" aria-label="top navigation">
+        
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">ESPnet</a>
+        
+      </nav>
+
+
+      <div class="wy-nav-content">
+        
+        <div class="rst-content">
+        
+          
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div role="navigation" aria-label="breadcrumbs navigation">
+
+  <ul class="wy-breadcrumbs">
+    
+      <li><a href="../../../../../index.html">Docs</a> &raquo;</li>
+        
+          <li><a href="../../../../index.html">Module code</a> &raquo;</li>
+        
+      <li>espnet.nets.pytorch_backend.transducer.rnn_decoders</li>
+    
+    
+      <li class="wy-breadcrumbs-aside">
+        
+      </li>
+    
+  </ul>
+
+  
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+            
+  <h1>Source code for espnet.nets.pytorch_backend.transducer.rnn_decoders</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Transducer and transducer with attention implementation for training and decoding.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">six</span>
+
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+
+<span class="kn">from</span> <span class="nn">espnet.nets.pytorch_backend.rnn.attentions</span> <span class="kn">import</span> <span class="n">att_to_numpy</span>
+
+<span class="kn">from</span> <span class="nn">espnet.nets.pytorch_backend.nets_utils</span> <span class="kn">import</span> <span class="n">pad_list</span>
+<span class="kn">from</span> <span class="nn">espnet.nets.pytorch_backend.nets_utils</span> <span class="kn">import</span> <span class="n">to_device</span>
+
+
+<div class="viewcode-block" id="DecoderRNNT"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNT">[docs]</a><span class="k">class</span> <span class="nc">DecoderRNNT</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;RNN-T Decoder module.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        eprojs (int): # encoder projection units</span>
+<span class="sd">        odim (int): dimension of outputs</span>
+<span class="sd">        dtype (str): gru or lstm</span>
+<span class="sd">        dlayers (int): # prediction layers</span>
+<span class="sd">        dunits (int): # prediction units</span>
+<span class="sd">        blank (int): blank symbol id</span>
+<span class="sd">        embed_dim (init): dimension of embeddings</span>
+<span class="sd">        joint_dim (int): dimension of joint space</span>
+<span class="sd">        dropout (float): dropout rate</span>
+<span class="sd">        dropout_embed (float): embedding dropout rate</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eprojs</span><span class="p">,</span> <span class="n">odim</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">dlayers</span><span class="p">,</span> <span class="n">dunits</span><span class="p">,</span> <span class="n">blank</span><span class="p">,</span>
+                 <span class="n">embed_dim</span><span class="p">,</span> <span class="n">joint_dim</span><span class="p">,</span> <span class="n">dropout</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">dropout_embed</span><span class="o">=</span><span class="mf">0.0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Transducer initializer.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">DecoderRNNT</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">embed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">odim</span><span class="p">,</span> <span class="n">embed_dim</span><span class="p">,</span> <span class="n">padding_idx</span><span class="o">=</span><span class="n">blank</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dropout_embed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="n">dropout_embed</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="s2">&quot;lstm&quot;</span><span class="p">:</span>
+            <span class="n">dec_net</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LSTMCell</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dec_net</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">GRUCell</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">dec_net</span><span class="p">(</span><span class="n">embed_dim</span><span class="p">,</span> <span class="n">dunits</span><span class="p">)])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="n">dropout</span><span class="p">)])</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dlayers</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span> <span class="o">+=</span> <span class="p">[</span><span class="n">dec_net</span><span class="p">(</span><span class="n">dunits</span><span class="p">,</span> <span class="n">dunits</span><span class="p">)]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span> <span class="o">+=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="n">dropout</span><span class="p">)]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">lin_enc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">eprojs</span><span class="p">,</span> <span class="n">joint_dim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lin_dec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">dunits</span><span class="p">,</span> <span class="n">joint_dim</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lin_out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">joint_dim</span><span class="p">,</span> <span class="n">odim</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dlayers</span> <span class="o">=</span> <span class="n">dlayers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span> <span class="o">=</span> <span class="n">dunits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">embed_dim</span> <span class="o">=</span> <span class="n">embed_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">joint_dim</span> <span class="o">=</span> <span class="n">joint_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">odim</span> <span class="o">=</span> <span class="n">odim</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ignore_id</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">blank</span> <span class="o">=</span> <span class="n">blank</span>
+
+<div class="viewcode-block" id="DecoderRNNT.zero_state"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNT.zero_state">[docs]</a>    <span class="k">def</span> <span class="nf">zero_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ey</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initialize decoder states.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ey (torch.Tensor): batch of input features (B, Emb_dim)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            (list): list of L zero-init hidden and cell state (B, Hdec)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">z_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">ey</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span><span class="p">)]</span>
+        <span class="n">c_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">ey</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span><span class="p">)]</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dlayers</span><span class="p">):</span>
+            <span class="n">z_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span><span class="p">))</span>
+            <span class="n">c_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DecoderRNNT.rnn_forward"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNT.rnn_forward">[docs]</a>    <span class="k">def</span> <span class="nf">rnn_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ey</span><span class="p">,</span> <span class="n">dstate</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;RNN forward.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ey (torch.Tensor): batch of input features (B, Emb_dim)</span>
+<span class="sd">            dstate (list): list of L input hidden and cell state (B, Hdec)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            output (torch.Tensor): batch of output features (B, Hdec)</span>
+<span class="sd">            dstate (list): list of L output hidden and cell state (B, Hdec)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">dstate</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">z_prev</span><span class="p">,</span> <span class="n">c_prev</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">ey</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">z_prev</span><span class="p">,</span> <span class="n">c_prev</span> <span class="o">=</span> <span class="n">dstate</span>
+
+        <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">ey</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="s2">&quot;lstm&quot;</span><span class="p">:</span>
+            <span class="n">z_list</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">c_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">ey</span><span class="p">,</span> <span class="p">(</span><span class="n">z_prev</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">c_prev</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+
+            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dlayers</span><span class="p">):</span>
+                <span class="n">z_list</span><span class="p">[</span><span class="n">l</span><span class="p">],</span> <span class="n">c_list</span><span class="p">[</span><span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">[</span><span class="n">l</span><span class="p">](</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="n">l</span> <span class="o">-</span> <span class="mi">1</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="n">l</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]),</span> <span class="p">(</span><span class="n">z_prev</span><span class="p">[</span><span class="n">l</span><span class="p">],</span> <span class="n">c_prev</span><span class="p">[</span><span class="n">l</span><span class="p">]))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">z_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">ey</span><span class="p">,</span> <span class="n">z_prev</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dlayers</span><span class="p">):</span>
+                <span class="n">z_list</span><span class="p">[</span><span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">[</span><span class="n">l</span><span class="p">](</span><span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="n">l</span> <span class="o">-</span> <span class="mi">1</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="n">l</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]),</span>
+                                            <span class="n">z_prev</span><span class="p">[</span><span class="n">l</span><span class="p">])</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DecoderRNNT.joint"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNT.joint">[docs]</a>    <span class="k">def</span> <span class="nf">joint</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">h_enc</span><span class="p">,</span> <span class="n">h_dec</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Joint computation of z.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            h_enc (torch.Tensor): batch of expanded hidden state (B, T, 1, Henc)</span>
+<span class="sd">            h_dec (torch.Tensor): batch of expanded hidden state (B, 1, U, Hdec)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            z (torch.Tensor): output (B, T, U, odim)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lin_enc</span><span class="p">(</span><span class="n">h_enc</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lin_dec</span><span class="p">(</span><span class="n">h_dec</span><span class="p">))</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lin_out</span><span class="p">(</span><span class="n">z</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">z</span></div>
+
+<div class="viewcode-block" id="DecoderRNNT.forward"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNT.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hs_pad</span><span class="p">,</span> <span class="n">ys_in_pad</span><span class="p">,</span> <span class="n">hlens</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Forward function for transducer.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            hs_pad (torch.Tensor): batch of padded hidden state sequences (B, Tmax, D)</span>
+<span class="sd">            ys_in_pad (torch.Tensor): batch of padded character id sequence tensor (B, Lmax+1)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            z (torch.Tensor): output (B, T, U, odim)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">olength</span> <span class="o">=</span> <span class="n">ys_in_pad</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">hs_pad</span><span class="p">)</span>
+        <span class="n">eys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_embed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span><span class="n">ys_in_pad</span><span class="p">))</span>
+
+        <span class="n">z_all</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="n">olength</span><span class="p">):</span>
+            <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">eys</span><span class="p">[:,</span> <span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">))</span>
+            <span class="n">z_all</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+        <span class="n">h_dec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">z_all</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">h_enc</span> <span class="o">=</span> <span class="n">hs_pad</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">h_dec</span> <span class="o">=</span> <span class="n">h_dec</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="n">h_enc</span><span class="p">,</span> <span class="n">h_dec</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">z</span></div>
+
+<div class="viewcode-block" id="DecoderRNNT.recognize"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNT.recognize">[docs]</a>    <span class="k">def</span> <span class="nf">recognize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">recog_args</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Greedy search implementation.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            h (torch.Tensor): encoder hidden state sequences (Tmax, Henc)</span>
+<span class="sd">            recog_args (Namespace): argument Namespace containing options</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            hyp (list of dicts): 1-best decoding results</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+        <span class="n">ey</span> <span class="o">=</span> <span class="n">to_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">embed_dim</span><span class="p">)))</span>
+
+        <span class="n">hyp</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;score&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;yseq&#39;</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">]}</span>
+
+        <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">ey</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">))</span>
+
+        <span class="k">for</span> <span class="n">hi</span> <span class="ow">in</span> <span class="n">h</span><span class="p">:</span>
+            <span class="n">ytu</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="n">hi</span><span class="p">,</span> <span class="n">y</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">logp</span><span class="p">,</span> <span class="n">pred</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">ytu</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">pred</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">:</span>
+                <span class="n">hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">pred</span><span class="p">))</span>
+                <span class="n">hyp</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">(</span><span class="n">logp</span><span class="p">)</span>
+
+                <span class="n">eys</span> <span class="o">=</span> <span class="n">to_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+                <span class="n">ey</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_embed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span><span class="n">eys</span><span class="p">))</span>
+
+                <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">ey</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">hyp</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="DecoderRNNT.recognize_beam"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNT.recognize_beam">[docs]</a>    <span class="k">def</span> <span class="nf">recognize_beam</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">recog_args</span><span class="p">,</span> <span class="n">rnnlm</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Beam search implementation.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            h (torch.Tensor): encoder hidden state sequences (Tmax, Henc)</span>
+<span class="sd">            recog_args (Namespace): argument Namespace containing options</span>
+<span class="sd">            rnnlm (torch.nn.Module): language module</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            nbest_hyps (list of dicts): n-best decoding results</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">beam</span> <span class="o">=</span> <span class="n">recog_args</span><span class="o">.</span><span class="n">beam_size</span>
+        <span class="n">k_range</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">beam</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">odim</span><span class="p">)</span>
+        <span class="n">nbest</span> <span class="o">=</span> <span class="n">recog_args</span><span class="o">.</span><span class="n">nbest</span>
+        <span class="n">normscore</span> <span class="o">=</span> <span class="n">recog_args</span><span class="o">.</span><span class="n">score_norm_transducer</span>
+
+        <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+        <span class="n">eys</span> <span class="o">=</span> <span class="n">to_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">embed_dim</span><span class="p">)))</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">eys</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">rnnlm</span><span class="p">:</span>
+            <span class="n">kept_hyps</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;score&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;yseq&#39;</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">],</span> <span class="s1">&#39;z_prev&#39;</span><span class="p">:</span> <span class="n">z_list</span><span class="p">,</span>
+                          <span class="s1">&#39;c_prev&#39;</span><span class="p">:</span> <span class="n">c_list</span><span class="p">,</span> <span class="s1">&#39;lm_state&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">kept_hyps</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;score&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;yseq&#39;</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">],</span> <span class="s1">&#39;z_prev&#39;</span><span class="p">:</span> <span class="n">z_list</span><span class="p">,</span>
+                          <span class="s1">&#39;c_prev&#39;</span><span class="p">:</span> <span class="n">c_list</span><span class="p">}]</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">hi</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">h</span><span class="p">):</span>
+            <span class="n">hyps</span> <span class="o">=</span> <span class="n">kept_hyps</span>
+            <span class="n">kept_hyps</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">new_hyp</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">hyps</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">])</span>
+                <span class="n">hyps</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_hyp</span><span class="p">)</span>
+
+                <span class="n">vy</span> <span class="o">=</span> <span class="n">to_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+                <span class="n">ey</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_embed</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span><span class="n">vy</span><span class="p">))</span>
+
+                <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">ey</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="p">(</span><span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;z_prev&#39;</span><span class="p">],</span>
+                                                               <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;c_prev&#39;</span><span class="p">]))</span>
+
+                <span class="n">ytu</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="n">hi</span><span class="p">,</span> <span class="n">y</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">rnnlm</span><span class="p">:</span>
+                    <span class="n">rnnlm_state</span><span class="p">,</span> <span class="n">rnnlm_scores</span> <span class="o">=</span> <span class="n">rnnlm</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;lm_state&#39;</span><span class="p">],</span> <span class="n">vy</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+                <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">odim</span><span class="p">):</span>
+                    <span class="n">beam_hyp</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;score&#39;</span><span class="p">:</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="nb">float</span><span class="p">(</span><span class="n">ytu</span><span class="p">[</span><span class="n">k</span><span class="p">]),</span>
+                                <span class="s1">&#39;yseq&#39;</span><span class="p">:</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">][:],</span>
+                                <span class="s1">&#39;z_prev&#39;</span><span class="p">:</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;z_prev&#39;</span><span class="p">],</span>
+                                <span class="s1">&#39;c_prev&#39;</span><span class="p">:</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;c_prev&#39;</span><span class="p">]}</span>
+                    <span class="k">if</span> <span class="n">rnnlm</span><span class="p">:</span>
+                        <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;lm_state&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;lm_state&#39;</span><span class="p">]</span>
+
+                    <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">:</span>
+                        <span class="n">kept_hyps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beam_hyp</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;z_prev&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">z_list</span><span class="p">[:]</span>
+                        <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;c_prev&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">c_list</span><span class="p">[:]</span>
+                        <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="p">))</span>
+
+                        <span class="k">if</span> <span class="n">rnnlm</span><span class="p">:</span>
+                            <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;lm_state&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">rnnlm_state</span>
+                            <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">recog_args</span><span class="o">.</span><span class="n">lm_weight</span> <span class="o">*</span> <span class="n">rnnlm_scores</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">k</span><span class="p">]</span>
+
+                        <span class="n">hyps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beam_hyp</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kept_hyps</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">k_range</span><span class="p">:</span>
+                    <span class="k">break</span>
+
+        <span class="k">if</span> <span class="n">normscore</span><span class="p">:</span>
+            <span class="n">nbest_hyps</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="n">kept_hyps</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">]),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)[:</span><span class="n">nbest</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">nbest_hyps</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="n">kept_hyps</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">],</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)[:</span><span class="n">nbest</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">nbest_hyps</span></div></div>
+
+
+<div class="viewcode-block" id="DecoderRNNTAtt"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNTAtt">[docs]</a><span class="k">class</span> <span class="nc">DecoderRNNTAtt</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;RNNT-Att Decoder module.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        eprojs (int): # encoder projection units</span>
+<span class="sd">        odim (int): dimension of outputs</span>
+<span class="sd">        dtype (str): gru or lstm</span>
+<span class="sd">        dlayers (int): # decoder layers</span>
+<span class="sd">        dunits (int): # decoder units</span>
+<span class="sd">        blank (int): blank symbol id</span>
+<span class="sd">        att (torch.nn.Module): attention module</span>
+<span class="sd">        embed_dim (int): dimension of embeddings</span>
+<span class="sd">        joint_dim (int): dimension of joint space</span>
+<span class="sd">        dropout (float): dropout rate</span>
+<span class="sd">        dropout_embed (float): embedding dropout rate</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eprojs</span><span class="p">,</span> <span class="n">odim</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">dlayers</span><span class="p">,</span> <span class="n">dunits</span><span class="p">,</span> <span class="n">blank</span><span class="p">,</span> <span class="n">att</span><span class="p">,</span>
+                 <span class="n">embed_dim</span><span class="p">,</span> <span class="n">joint_dim</span><span class="p">,</span> <span class="n">dropout</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">dropout_embed</span><span class="o">=</span><span class="mf">0.0</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Transducer with attention initializer.&quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">DecoderRNNTAtt</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">embed</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Embedding</span><span class="p">(</span><span class="n">odim</span><span class="p">,</span> <span class="n">embed_dim</span><span class="p">,</span> <span class="n">padding_idx</span><span class="o">=</span><span class="n">blank</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dropout_emb</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="n">dropout_embed</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="s2">&quot;lstm&quot;</span><span class="p">:</span>
+            <span class="n">dec_net</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">LSTMCell</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dec_net</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">GRUCell</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">dec_net</span><span class="p">((</span><span class="n">embed_dim</span> <span class="o">+</span> <span class="n">eprojs</span><span class="p">),</span> <span class="n">dunits</span><span class="p">)])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="n">dropout</span><span class="p">)])</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">dlayers</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span> <span class="o">+=</span> <span class="p">[</span><span class="n">dec_net</span><span class="p">(</span><span class="n">dunits</span><span class="p">,</span> <span class="n">dunits</span><span class="p">)]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span> <span class="o">+=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Dropout</span><span class="p">(</span><span class="n">p</span><span class="o">=</span><span class="n">dropout</span><span class="p">)]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">lin_enc</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">eprojs</span><span class="p">,</span> <span class="n">joint_dim</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lin_dec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">dunits</span><span class="p">,</span> <span class="n">joint_dim</span><span class="p">,</span> <span class="n">bias</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lin_out</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="n">joint_dim</span><span class="p">,</span> <span class="n">odim</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">att</span> <span class="o">=</span> <span class="n">att</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dlayers</span> <span class="o">=</span> <span class="n">dlayers</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span> <span class="o">=</span> <span class="n">dunits</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">embed_dim</span> <span class="o">=</span> <span class="n">embed_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">joint_dim</span> <span class="o">=</span> <span class="n">joint_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">odim</span> <span class="o">=</span> <span class="n">odim</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ignore_id</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">blank</span> <span class="o">=</span> <span class="n">blank</span>
+
+<div class="viewcode-block" id="DecoderRNNTAtt.zero_state"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNTAtt.zero_state">[docs]</a>    <span class="k">def</span> <span class="nf">zero_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ey</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Initialize decoder states.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ey (torch.Tensor): batch of input features (B, (Emb_dim + Eprojs))</span>
+
+<span class="sd">        Return:</span>
+<span class="sd">            z_list : list of L zero-init hidden state (B, Hdec)</span>
+<span class="sd">            c_list : list of L zero-init cell state (B, Hdec)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">z_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">ey</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span><span class="p">)]</span>
+        <span class="n">c_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">ey</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span><span class="p">)]</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dlayers</span><span class="p">):</span>
+            <span class="n">z_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span><span class="p">))</span>
+            <span class="n">c_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">new_zeros</span><span class="p">(</span><span class="n">ey</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dunits</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span></div>
+
+<div class="viewcode-block" id="DecoderRNNTAtt.rnn_forward"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNTAtt.rnn_forward">[docs]</a>    <span class="k">def</span> <span class="nf">rnn_forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ey</span><span class="p">,</span> <span class="n">dstate</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;RNN forward.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            ey (torch.Tensor): batch of input features (B, (Emb_dim + Eprojs))</span>
+<span class="sd">            dstate (list): list of L input hidden and cell state (B, Hdec)</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            y (torch.Tensor): decoder output for one step (B, Hdec)</span>
+<span class="sd">            (list): list of L output hidden and cell state (B, Hdec)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">dstate</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">z_prev</span><span class="p">,</span> <span class="n">c_prev</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">ey</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">z_prev</span><span class="p">,</span> <span class="n">c_prev</span> <span class="o">=</span> <span class="n">dstate</span>
+
+        <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">ey</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="s2">&quot;lstm&quot;</span><span class="p">:</span>
+            <span class="n">z_list</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">c_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">ey</span><span class="p">,</span> <span class="p">(</span><span class="n">z_prev</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">c_prev</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+
+            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dlayers</span><span class="p">):</span>
+                <span class="n">z_list</span><span class="p">[</span><span class="n">l</span><span class="p">],</span> <span class="n">c_list</span><span class="p">[</span><span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">[</span><span class="n">l</span><span class="p">](</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="n">l</span> <span class="o">-</span> <span class="mi">1</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="n">l</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]),</span> <span class="p">(</span><span class="n">z_prev</span><span class="p">[</span><span class="n">l</span><span class="p">],</span> <span class="n">c_prev</span><span class="p">[</span><span class="n">l</span><span class="p">]))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">z_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">ey</span><span class="p">,</span> <span class="n">z_prev</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+            <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dlayers</span><span class="p">):</span>
+                <span class="n">z_list</span><span class="p">[</span><span class="n">l</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">decoder</span><span class="p">[</span><span class="n">l</span><span class="p">](</span><span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="n">l</span> <span class="o">-</span> <span class="mi">1</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="n">l</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]),</span> <span class="n">z_prev</span><span class="p">[</span><span class="n">l</span><span class="p">])</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DecoderRNNTAtt.joint"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNTAtt.joint">[docs]</a>    <span class="k">def</span> <span class="nf">joint</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">h_enc</span><span class="p">,</span> <span class="n">h_dec</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Joint computation of z.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            h_enc (torch.Tensor): batch of expanded hidden state (B, T, 1, Henc)</span>
+<span class="sd">            h_dec (torch.Tensor): batch of expanded hidden state (B, 1, U, Hdec)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            z (torch.Tensor): output (B, T, U, odim)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lin_enc</span><span class="p">(</span><span class="n">h_enc</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lin_dec</span><span class="p">(</span><span class="n">h_dec</span><span class="p">))</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lin_out</span><span class="p">(</span><span class="n">z</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">z</span></div>
+
+<div class="viewcode-block" id="DecoderRNNTAtt.forward"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNTAtt.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hs_pad</span><span class="p">,</span> <span class="n">ys_in_pad</span><span class="p">,</span> <span class="n">hlens</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Forward function for transducer with attention.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            hs_pad (torch.Tensor): batch of padded hidden state sequences (B, Tmax, D)</span>
+<span class="sd">            ys_in_pad (torch.Tensor): batch of padded character id sequence tensor (B, Lmax+1)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            z (torch.Tensor): output (B, T, U, odim)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">olength</span> <span class="o">=</span> <span class="n">ys_in_pad</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">hlens</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">hlens</span><span class="p">))</span>
+
+        <span class="n">att_w</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+        <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">hs_pad</span><span class="p">)</span>
+        <span class="n">eys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_emb</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span><span class="n">ys_in_pad</span><span class="p">))</span>
+
+        <span class="n">z_all</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="n">olength</span><span class="p">):</span>
+            <span class="n">att_c</span><span class="p">,</span> <span class="n">att_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">hs_pad</span><span class="p">,</span> <span class="n">hlens</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">att_w</span><span class="p">)</span>
+
+            <span class="n">ey</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">eys</span><span class="p">[:,</span> <span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="n">att_c</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">ey</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">))</span>
+            <span class="n">z_all</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
+
+        <span class="n">h_dec</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">z_all</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">h_enc</span> <span class="o">=</span> <span class="n">hs_pad</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">h_dec</span> <span class="o">=</span> <span class="n">h_dec</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">z</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="n">h_enc</span><span class="p">,</span> <span class="n">h_dec</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">z</span></div>
+
+<div class="viewcode-block" id="DecoderRNNTAtt.recognize"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNTAtt.recognize">[docs]</a>    <span class="k">def</span> <span class="nf">recognize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">recog_args</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Greedy search implementation.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            h (torch.Tensor): encoder hidden state sequences (Tmax, Henc)</span>
+<span class="sd">            recog_args (Namespace): argument Namespace containing options</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            hyp (list of dicts): 1-best decoding results</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+        <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+        <span class="n">eys</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">embed_dim</span><span class="p">))</span>
+
+        <span class="n">att_c</span><span class="p">,</span> <span class="n">att_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="p">[</span><span class="n">h</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)],</span>
+                                   <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">ey</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">eys</span><span class="p">,</span> <span class="n">att_c</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">hyp</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;score&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;yseq&#39;</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">]}</span>
+
+        <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">ey</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">))</span>
+
+        <span class="k">for</span> <span class="n">hi</span> <span class="ow">in</span> <span class="n">h</span><span class="p">:</span>
+            <span class="n">ytu</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="n">hi</span><span class="p">,</span> <span class="n">y</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">logp</span><span class="p">,</span> <span class="n">pred</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">ytu</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="k">if</span> <span class="n">pred</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">:</span>
+                <span class="n">hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">pred</span><span class="p">))</span>
+                <span class="n">hyp</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="nb">float</span><span class="p">(</span><span class="n">logp</span><span class="p">)</span>
+
+                <span class="n">eys</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">)</span>
+                <span class="n">ey</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_emb</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span><span class="n">eys</span><span class="p">))</span>
+                <span class="n">att_c</span><span class="p">,</span> <span class="n">att_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="p">[</span><span class="n">h</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)],</span>
+                                           <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
+                                           <span class="n">att_w</span><span class="p">)</span>
+                <span class="n">ey</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">ey</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">att_c</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+                <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">ey</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="p">[</span><span class="n">hyp</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="DecoderRNNTAtt.recognize_beam"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNTAtt.recognize_beam">[docs]</a>    <span class="k">def</span> <span class="nf">recognize_beam</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">h</span><span class="p">,</span> <span class="n">recog_args</span><span class="p">,</span> <span class="n">rnnlm</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Beam search recognition.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            h (torch.Tensor): encoder hidden state sequences (Tmax, Henc)</span>
+<span class="sd">            recog_args (Namespace): argument Namespace containing options</span>
+<span class="sd">            rnnlm (torch.nn.Module): language module</span>
+
+<span class="sd">        Results:</span>
+<span class="sd">            nbest_hyps (list of dicts): n-best decoding results</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">beam</span> <span class="o">=</span> <span class="n">recog_args</span><span class="o">.</span><span class="n">beam_size</span>
+        <span class="n">k_range</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">beam</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">odim</span><span class="p">)</span>
+        <span class="n">nbest</span> <span class="o">=</span> <span class="n">recog_args</span><span class="o">.</span><span class="n">nbest</span>
+        <span class="n">normscore</span> <span class="o">=</span> <span class="n">recog_args</span><span class="o">.</span><span class="n">score_norm_transducer</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+        <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">))</span>
+        <span class="n">eys</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">embed_dim</span><span class="p">))</span>
+
+        <span class="n">att_c</span><span class="p">,</span> <span class="n">att_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="p">[</span><span class="n">h</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)],</span>
+                                   <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="n">ey</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">eys</span><span class="p">,</span> <span class="n">att_c</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">ey</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">rnnlm</span><span class="p">:</span>
+            <span class="n">kept_hyps</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;score&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;yseq&#39;</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">],</span> <span class="s1">&#39;z_prev&#39;</span><span class="p">:</span> <span class="n">z_list</span><span class="p">,</span>
+                          <span class="s1">&#39;c_prev&#39;</span><span class="p">:</span> <span class="n">c_list</span><span class="p">,</span> <span class="s1">&#39;a_prev&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;lm_state&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">kept_hyps</span> <span class="o">=</span> <span class="p">[{</span><span class="s1">&#39;score&#39;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s1">&#39;yseq&#39;</span><span class="p">:</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">],</span> <span class="s1">&#39;z_prev&#39;</span><span class="p">:</span> <span class="n">z_list</span><span class="p">,</span>
+                          <span class="s1">&#39;c_prev&#39;</span><span class="p">:</span> <span class="n">c_list</span><span class="p">,</span> <span class="s1">&#39;a_prev&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}]</span>
+
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">hi</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">h</span><span class="p">):</span>
+            <span class="n">hyps</span> <span class="o">=</span> <span class="n">kept_hyps</span>
+            <span class="n">kept_hyps</span> <span class="o">=</span> <span class="p">[]</span>
+
+            <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">new_hyp</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">hyps</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">])</span>
+                <span class="n">hyps</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">new_hyp</span><span class="p">)</span>
+
+                <span class="n">vy</span> <span class="o">=</span> <span class="n">to_device</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">torch</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">long</span><span class="p">))</span>
+                <span class="n">ey</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_emb</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span><span class="n">vy</span><span class="p">))</span>
+
+                <span class="n">att_c</span><span class="p">,</span> <span class="n">att_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">h</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="p">[</span><span class="n">h</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)],</span>
+                                           <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;z_prev&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]),</span>
+                                           <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;a_prev&#39;</span><span class="p">])</span>
+
+                <span class="n">ey</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">ey</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">att_c</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">y</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">ey</span><span class="p">,</span> <span class="p">(</span><span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;z_prev&#39;</span><span class="p">],</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;c_prev&#39;</span><span class="p">]))</span>
+                <span class="n">ytu</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="n">hi</span><span class="p">,</span> <span class="n">y</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">rnnlm</span><span class="p">:</span>
+                    <span class="n">rnnlm_state</span><span class="p">,</span> <span class="n">rnnlm_scores</span> <span class="o">=</span> <span class="n">rnnlm</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;lm_state&#39;</span><span class="p">],</span> <span class="n">vy</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+                <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">odim</span><span class="p">):</span>
+                    <span class="n">beam_hyp</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;score&#39;</span><span class="p">:</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">]</span> <span class="o">+</span> <span class="nb">float</span><span class="p">(</span><span class="n">ytu</span><span class="p">[</span><span class="n">k</span><span class="p">]),</span>
+                                <span class="s1">&#39;yseq&#39;</span><span class="p">:</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">][:],</span>
+                                <span class="s1">&#39;z_prev&#39;</span><span class="p">:</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;z_prev&#39;</span><span class="p">],</span>
+                                <span class="s1">&#39;c_prev&#39;</span><span class="p">:</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;c_prev&#39;</span><span class="p">],</span>
+                                <span class="s1">&#39;a_prev&#39;</span><span class="p">:</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;a_prev&#39;</span><span class="p">]}</span>
+                    <span class="k">if</span> <span class="n">rnnlm</span><span class="p">:</span>
+                        <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;lm_state&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">new_hyp</span><span class="p">[</span><span class="s1">&#39;lm_state&#39;</span><span class="p">]</span>
+
+                    <span class="k">if</span> <span class="n">k</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">:</span>
+                        <span class="n">kept_hyps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beam_hyp</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;z_prev&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">z_list</span><span class="p">[:]</span>
+                        <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;c_prev&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">c_list</span><span class="p">[:]</span>
+                        <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;a_prev&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">att_w</span><span class="p">[:]</span>
+                        <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">k</span><span class="p">))</span>
+
+                        <span class="k">if</span> <span class="n">rnnlm</span><span class="p">:</span>
+                            <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;lm_state&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">rnnlm_state</span>
+                            <span class="n">beam_hyp</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">recog_args</span><span class="o">.</span><span class="n">lm_weight</span> <span class="o">*</span> <span class="n">rnnlm_scores</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">k</span><span class="p">]</span>
+
+                        <span class="n">hyps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">beam_hyp</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">kept_hyps</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">k_range</span><span class="p">:</span>
+                    <span class="k">break</span>
+
+        <span class="k">if</span> <span class="n">normscore</span><span class="p">:</span>
+            <span class="n">nbest_hyps</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="n">kept_hyps</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="s1">&#39;yseq&#39;</span><span class="p">]),</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)[:</span><span class="n">nbest</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">nbest_hyps</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+                <span class="n">kept_hyps</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="s1">&#39;score&#39;</span><span class="p">],</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)[:</span><span class="n">nbest</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">nbest_hyps</span></div>
+
+<div class="viewcode-block" id="DecoderRNNTAtt.calculate_all_attentions"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.DecoderRNNTAtt.calculate_all_attentions">[docs]</a>    <span class="k">def</span> <span class="nf">calculate_all_attentions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">hs_pad</span><span class="p">,</span> <span class="n">hlens</span><span class="p">,</span> <span class="n">ys_pad</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Calculate all of attentions.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            hs_pad (torch.Tensor): batch of padded hidden state sequences (B, Tmax, D)</span>
+<span class="sd">            hlens (torch.Tensor): batch of lengths of hidden state sequences (B)</span>
+<span class="sd">            ys_pad (torch.Tensor): batch of padded character id sequence tensor (B, Lmax)</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            att_ws (ndarray): attention weights with the following shape,</span>
+<span class="sd">                1) multi-head case =&gt; attention weights (B, H, Lmax, Tmax),</span>
+<span class="sd">                2) other case =&gt; attention weights (B, Lmax, Tmax).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ys</span> <span class="o">=</span> <span class="p">[</span><span class="n">y</span><span class="p">[</span><span class="n">y</span> <span class="o">!=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ignore_id</span><span class="p">]</span> <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="n">ys_pad</span><span class="p">]</span>
+
+        <span class="n">hlens</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">hlens</span><span class="p">))</span>
+
+        <span class="n">blank</span> <span class="o">=</span> <span class="n">ys</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">new</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">])</span>
+
+        <span class="n">ys_in</span> <span class="o">=</span> <span class="p">[</span><span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">blank</span><span class="p">,</span> <span class="n">y</span><span class="p">],</span> <span class="n">dim</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="n">ys</span><span class="p">]</span>
+        <span class="n">ys_in_pad</span> <span class="o">=</span> <span class="n">pad_list</span><span class="p">(</span><span class="n">ys_in</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">blank</span><span class="p">)</span>
+
+        <span class="n">olength</span> <span class="o">=</span> <span class="n">ys_in_pad</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="n">att_w</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">att_ws</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">reset</span><span class="p">()</span>
+
+        <span class="n">eys</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_emb</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">embed</span><span class="p">(</span><span class="n">ys_in_pad</span><span class="p">))</span>
+        <span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">zero_state</span><span class="p">(</span><span class="n">eys</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">six</span><span class="o">.</span><span class="n">moves</span><span class="o">.</span><span class="n">range</span><span class="p">(</span><span class="n">olength</span><span class="p">):</span>
+            <span class="n">att_c</span><span class="p">,</span> <span class="n">att_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">hs_pad</span><span class="p">,</span> <span class="n">hlens</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dropout_dec</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="n">z_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">att_w</span><span class="p">)</span>
+            <span class="n">ey</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">eys</span><span class="p">[:,</span> <span class="n">i</span><span class="p">,</span> <span class="p">:],</span> <span class="n">att_c</span><span class="p">),</span> <span class="n">dim</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+            <span class="n">_</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">)</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rnn_forward</span><span class="p">(</span><span class="n">ey</span><span class="p">,</span> <span class="p">(</span><span class="n">z_list</span><span class="p">,</span> <span class="n">c_list</span><span class="p">))</span>
+
+            <span class="n">att_ws</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">att_w</span><span class="p">)</span>
+
+        <span class="n">att_ws</span> <span class="o">=</span> <span class="n">att_to_numpy</span><span class="p">(</span><span class="n">att_ws</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">att</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">att_ws</span></div></div>
+
+
+<div class="viewcode-block" id="decoder_for"><a class="viewcode-back" href="../../../../../_gen/espnet.nets.html#espnet.nets.pytorch_backend.transducer.rnn_decoders.decoder_for">[docs]</a><span class="k">def</span> <span class="nf">decoder_for</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">odim</span><span class="p">,</span> <span class="n">att</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">blank</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Transducer mode selector.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">args</span><span class="o">.</span><span class="n">rnnt_mode</span> <span class="o">==</span> <span class="s1">&#39;rnnt&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">DecoderRNNT</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">eprojs</span><span class="p">,</span> <span class="n">odim</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dlayers</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dunits</span><span class="p">,</span>
+                           <span class="n">blank</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dec_embed_dim</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">joint_dim</span><span class="p">,</span>
+                           <span class="n">args</span><span class="o">.</span><span class="n">dropout_rate_decoder</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dropout_rate_embed_decoder</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">args</span><span class="o">.</span><span class="n">rnnt_mode</span> <span class="o">==</span> <span class="s1">&#39;rnnt-att&#39;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">DecoderRNNTAtt</span><span class="p">(</span><span class="n">args</span><span class="o">.</span><span class="n">eprojs</span><span class="p">,</span> <span class="n">odim</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dtype</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dlayers</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dunits</span><span class="p">,</span>
+                              <span class="n">blank</span><span class="p">,</span> <span class="n">att</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dec_embed_dim</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">joint_dim</span><span class="p">,</span>
+                              <span class="n">args</span><span class="o">.</span><span class="n">dropout_rate_decoder</span><span class="p">,</span> <span class="n">args</span><span class="o">.</span><span class="n">dropout_rate_embed_decoder</span><span class="p">)</span></div>
+</pre></div>
+
+           </div>
+           
+          </div>
+          <footer>
+  
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>
+        &copy; Copyright 2017, Shinji Watanabe
+
+    </p>
+  </div>
+  Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>. 
+
+</footer>
+
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+  
+
+
+  <script type="text/javascript">
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script>
+
+  
+  
+    
+   
+
+</body>
+</html>
