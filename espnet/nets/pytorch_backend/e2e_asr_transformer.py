@@ -73,7 +73,7 @@ class E2E(ASRInterface, torch.nn.Module):
             "--transformer-input-layer",
             type=str,
             default="conv2d",
-            choices=["conv2d", "linear", "embed"],
+            choices=["conv2d", "linear", "embed", "vgg"],
             help="transformer input layer type",
         )
         group.add_argument(
@@ -114,6 +114,13 @@ class E2E(ASRInterface, torch.nn.Module):
                 "light-dynamicconv2d",
             ],
             help="transformer encoder self-attention layer type",
+        )
+        group.add_argument(
+            "--transformer-decoder-pos-enc-layer-type",
+            type=str,
+            default="abs_pos",
+            choices=["abs_pos", "scaled_abs_pos", "rel_pos", "conv_pos"],
+            help="transformer decoder positional encoding layer type",
         )
         group.add_argument(
             "--transformer-decoder-selfattn-layer-type",
@@ -161,6 +168,37 @@ class E2E(ASRInterface, torch.nn.Module):
             type=strtobool,
             default=False,
             help="use bias term in lightweight/dynamic convolution",
+        )
+        # VGG input layer
+        group.add_argument(
+            "--vgg-channels",
+            default=[64, 128],
+            type=lambda s: [int(mod) for mod in s.split("_") if s != ""],
+            help="Output channels in each VGG-like input block.",
+        )
+        group.add_argument(
+            "--vgg-kernel-sizes",
+            default=[3, 3],
+            type=lambda s: [int(mod) for mod in s.split("_") if s != ""],
+            help="Convoluational kernel size in each VGG-like input block.",
+        )
+        group.add_argument(
+            "--vgg-pooling-sizes",
+            default=[2, 2],
+            type=lambda s: [int(mod) for mod in s.split("_") if s != ""],
+            help="Maxpooling kernel sizes in each VGG-like input block.",
+        )
+        group.add_argument(
+            "--vgg-layer-norms",
+            default=[True, True],
+            type=lambda s: [strtobool(mod) for mod in s.split("_") if s != ""],
+            help="Whether to use LayerNorm in each VGG-like input block.",
+        )
+        group.add_argument(
+            "--vgg-num-convs",
+            default=[2, 2],
+            type=lambda s: [int(mod) for mod in s.split("_") if s != ""],
+            help="Number of convolutional layer in each VGG-like block.",
         )
         group.add_argument(
             "--dropout-rate",
@@ -232,6 +270,11 @@ class E2E(ASRInterface, torch.nn.Module):
             conv_wshare=args.wshare,
             conv_kernel_length=args.ldconv_encoder_kernel_length,
             conv_usebias=args.ldconv_usebias,
+            vgg_channels=args.vgg_channels,
+            vgg_kernel_sizes=args.vgg_kernel_size,
+            vgg_pooling_sizes=args.vgg_pooling_sizes,
+            vgg_layer_norms=args.vgg_layer_norms,
+            vgg_num_convs=args.vgg_num_convs,
             linear_units=args.eunits,
             num_blocks=args.elayers,
             input_layer=args.transformer_input_layer,
@@ -254,6 +297,7 @@ class E2E(ASRInterface, torch.nn.Module):
                 positional_dropout_rate=args.dropout_rate,
                 self_attention_dropout_rate=args.transformer_attn_dropout_rate,
                 src_attention_dropout_rate=args.transformer_attn_dropout_rate,
+                pos_enc_layer_type=args.transformer_decoder_pos_enc_layer_type,
             )
         else:
             self.decoder = None
