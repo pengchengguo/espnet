@@ -46,20 +46,21 @@ class EncoderLayer(nn.Module):
         self.feed_forward = feed_forward
         self.norm1 = LayerNorm(size)
         self.norm2 = LayerNorm(size)
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropout_rate = dropout_rate
         self.size = size
         self.normalize_before = normalize_before
         self.concat_after = concat_after
         if self.concat_after:
             self.concat_linear = nn.Linear(size + size, size)
 
-    def forward(self, x, mask, cache=None):
+    def forward(self, x, mask, cache=None, init_dp=True):
         """Compute encoded features.
 
         :param torch.Tensor x: encoded source features (batch, max_time_in, size)
         :param torch.Tensor mask: mask for x
             (batch, 1, max_time_in) or (batch, max_time_in, max_time_in)
         :param torch.Tensor cache: cache for x (batch, max_time_in - 1, size)
+        :param bool: whether to init dropout mask by manually
         :rtype: Tuple[torch.Tensor, torch.Tensor]
         """
         residual = x
@@ -75,17 +76,37 @@ class EncoderLayer(nn.Module):
             mask = None if mask is None else mask[:, -1:, :]
 
         if self.concat_after:
-            x_concat = torch.cat((x, self.self_attn(x_q, x, x, mask)), dim=-1)
+            x_concat = torch.cat(
+                (x, self.self_attn(x_q, x, x, mask, init_dp=init_dp)),
+                dim=-1,
+            )
             x = residual + self.concat_linear(x_concat)
         else:
-            x = residual + self.dropout(self.self_attn(x_q, x, x, mask))
+            x = self.self_attn(x_q, x, x, mask, init_dp=init_dp)
+            if self.training and self.dropout_rate > 0.0:
+                if init_dp:
+                    self.dp_mask1 = torch.zeros_like(x).bernoulli_(
+                        1 - self.dropout_rate
+                    ) / (1 - self.dropout_rate)
+                x = self.dp_mask1 * x
+            x = residual + x
+
         if not self.normalize_before:
             x = self.norm1(x)
 
         residual = x
         if self.normalize_before:
             x = self.norm2(x)
-        x = residual + self.dropout(self.feed_forward(x))
+
+        x = self.feed_forward(x, init_dp=init_dp)
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask2 = torch.zeros_like(x).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            x = self.dp_mask2 * x
+        x = residual + x
+
         if not self.normalize_before:
             x = self.norm2(x)
 

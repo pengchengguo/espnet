@@ -276,11 +276,12 @@ class Encoder(torch.nn.Module):
             raise NotImplementedError("Support only linear or conv1d.")
         return positionwise_layer, positionwise_layer_args
 
-    def forward(self, xs, masks):
+    def forward(self, xs, masks, init_dp=True):
         """Encode input sequence.
 
         :param torch.Tensor xs: input tensor
         :param torch.Tensor masks: input mask
+        :param bool: whether to init dropout mask by manually
         :return: position embedded tensor and mask
         :rtype Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -288,10 +289,14 @@ class Encoder(torch.nn.Module):
             self.embed,
             (Conv2dSubsampling, Conv2dSubsampling6, Conv2dSubsampling8, VGG2L),
         ):
-            xs, masks = self.embed(xs, masks)
+            xs, masks = self.embed(xs, masks, init_dp=init_dp)
         else:
-            xs = self.embed(xs)
-        xs, masks = self.encoders(xs, masks)
+            xs = self.embed(xs, init_dp=init_dp)
+        # xs, masks = self.encoders(xs, masks, init_dp=init_dp)
+
+        for encoder in self.encoders:
+            xs, masks = encoder(xs, masks, init_dp=init_dp)
+
         if self.normalize_before:
             xs = self.after_norm(xs)
         return xs, masks

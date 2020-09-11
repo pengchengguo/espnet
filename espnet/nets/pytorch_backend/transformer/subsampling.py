@@ -30,16 +30,17 @@ class Conv2dSubsampling(torch.nn.Module):
             torch.nn.Conv2d(odim, odim, 3, 2),
             torch.nn.ReLU(),
         )
-        self.out = torch.nn.Sequential(
-            torch.nn.Linear(odim * (((idim - 1) // 2 - 1) // 2), odim),
-            pos_enc if pos_enc is not None else PositionalEncoding(odim, dropout_rate),
+        self.fc = torch.nn.Linear(odim * (((idim - 1) // 2 - 1) // 2), odim)
+        self.pos_enc = (
+            pos_enc if pos_enc is not None else PositionalEncoding(odim, dropout_rate)
         )
 
-    def forward(self, x, x_mask):
+    def forward(self, x, x_mask, init_dp=True):
         """Subsample x.
 
         :param torch.Tensor x: input tensor
         :param torch.Tensor x_mask: input mask
+        :param bool: whether to init dropout mask by manually
         :return: subsampled x and mask
         :rtype Tuple[torch.Tensor, torch.Tensor]
 
@@ -47,9 +48,12 @@ class Conv2dSubsampling(torch.nn.Module):
         x = x.unsqueeze(1)  # (b, c, t, f)
         x = self.conv(x)
         b, c, t, f = x.size()
-        x = self.out(x.transpose(1, 2).contiguous().view(b, t, c * f))
+        x = self.fc(x.transpose(1, 2).contiguous().view(b, t, c * f))
+        x = self.pos_enc(x, init_dp=init_dp)
+
         if x_mask is None:
             return x, None
+
         return x, x_mask[:, :, :-2:2][:, :, :-2:2]
 
     def __getitem__(self, key):

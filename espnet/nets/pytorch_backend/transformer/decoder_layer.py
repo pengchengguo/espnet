@@ -50,14 +50,14 @@ class DecoderLayer(nn.Module):
         self.norm1 = LayerNorm(size)
         self.norm2 = LayerNorm(size)
         self.norm3 = LayerNorm(size)
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropout_rate = dropout_rate
         self.normalize_before = normalize_before
         self.concat_after = concat_after
         if self.concat_after:
             self.concat_linear1 = nn.Linear(size + size, size)
             self.concat_linear2 = nn.Linear(size + size, size)
 
-    def forward(self, tgt, tgt_mask, memory, memory_mask, cache=None):
+    def forward(self, tgt, tgt_mask, memory, memory_mask, cache=None, init_dp=True):
         """Compute decoded features.
 
         Args:
@@ -67,6 +67,7 @@ class DecoderLayer(nn.Module):
             memory (torch.Tensor): encoded source features (batch, max_time_in, size)
             memory_mask (torch.Tensor): mask for memory (batch, 1, max_time_in)
             cache (torch.Tensor): cached output (batch, max_time_out-1, size)
+            init_dp (bool): whether to init dropout mask by manually
 
         """
         residual = tgt
@@ -91,11 +92,20 @@ class DecoderLayer(nn.Module):
 
         if self.concat_after:
             tgt_concat = torch.cat(
-                (tgt_q, self.self_attn(tgt_q, tgt, tgt, tgt_q_mask)), dim=-1
+                (tgt_q, self.self_attn(tgt_q, tgt, tgt, tgt_q_mask, init_dp=init_dp)),
+                dim=-1,
             )
             x = residual + self.concat_linear1(tgt_concat)
         else:
-            x = residual + self.dropout(self.self_attn(tgt_q, tgt, tgt, tgt_q_mask))
+            x = self.self_attn(tgt_q, tgt, tgt, tgt_q_mask, init_dp=init_dp)
+            if self.training and self.dropout_rate > 0.0:
+                if init_dp:
+                    self.dp_mask1 = torch.zeros_like(x).bernoulli_(
+                        1 - self.dropout_rate
+                    ) / (1 - self.dropout_rate)
+                x = self.dp_mask1 * x
+            x = residual + x
+
         if not self.normalize_before:
             x = self.norm1(x)
 
@@ -104,18 +114,36 @@ class DecoderLayer(nn.Module):
             x = self.norm2(x)
         if self.concat_after:
             x_concat = torch.cat(
-                (x, self.src_attn(x, memory, memory, memory_mask)), dim=-1
+                (x, self.src_attn(x, memory, memory, memory_mask, init_dp=init_dp)),
+                dim=-1,
             )
             x = residual + self.concat_linear2(x_concat)
         else:
-            x = residual + self.dropout(self.src_attn(x, memory, memory, memory_mask))
+            x = self.src_attn(x, memory, memory, memory_mask, init_dp=init_dp)
+            if self.training and self.dropout_rate > 0.0:
+                if init_dp:
+                    self.dp_mask2 = torch.zeros_like(x).bernoulli_(
+                        1 - self.dropout_rate
+                    ) / (1 - self.dropout_rate)
+                x = self.dp_mask2 * x
+            x = residual + x
+
         if not self.normalize_before:
             x = self.norm2(x)
 
         residual = x
         if self.normalize_before:
             x = self.norm3(x)
-        x = residual + self.dropout(self.feed_forward(x))
+
+        x = self.feed_forward(x, init_dp=init_dp)
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask3 = torch.zeros_like(x).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            x = self.dp_mask3 * x
+        x = residual + x
+
         if not self.normalize_before:
             x = self.norm3(x)
 

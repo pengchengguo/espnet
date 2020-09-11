@@ -516,26 +516,13 @@ def get_parser(parser=None, required=True):
     parser.add_argument("--fbank-fmax", type=float, default=None, help="")
     # Adversarial training related
     parser.add_argument(
-        "--adv-type",
-        type=str,
-        default=None,
-        choices=[
-            None,
-            "freelb",
-        ],
-        help="Adversarial training type.",
+        "--adv-type", type=str, default="freelb", help="Adversarial training type."
     )
     parser.add_argument(
         "--adv-prob",
         type=float,
         default=1.0,
         help="Adversarial training probability.",
-    )
-    parser.add_argument(
-        "--adv-weight",
-        type=float,
-        default=0.0,
-        help="Adversarial regularization loss weight.",
     )
     parser.add_argument(
         "--adv-alpha",
@@ -561,18 +548,8 @@ def get_parser(parser=None, required=True):
         default=-1,
         help="Epoch to start adversarial training.",
     )
-    parser.add_argument(
-        "--adv-max-norm",
-        type=float,
-        default=0.3,
-        help="",
-    )
-    parser.add_argument(
-        "--no-sync-dp",
-        type=strtobool,
-        default=False,
-        help="Init a new dropout mask or use previous cached dropout mask.",
-    )
+    parser.add_argument("--adv-max-norm", type=float, default=0.3, help="")
+
     return parser
 
 
@@ -580,15 +557,9 @@ def main(cmd_args):
     """Run the main training function."""
     parser = get_parser()
     args, _ = parser.parse_known_args(cmd_args)
-    if args.backend == "chainer" and args.train_dtype != "float32":
-        raise NotImplementedError(
-            f"chainer backend does not support --train-dtype {args.train_dtype}."
-            "Use --dtype float32."
-        )
-    if args.ngpu == 0 and args.train_dtype in ("O0", "O1", "O2", "O3", "float16"):
-        raise ValueError(
-            f"--train-dtype {args.train_dtype} does not support the CPU backend."
-        )
+
+    if args.backend == "chainer":
+        raise NotImplementedError("chainer backend does not support.")
 
     from espnet.utils.dynamic_import import dynamic_import
 
@@ -671,29 +642,12 @@ def main(cmd_args):
     # train
     logging.info("backend = " + args.backend)
 
-    if args.adv_type:
-        from espnet.asr.pytorch_backend.asr_adv import train
-
-        train(args)
-    elif args.num_spkrs == 1:
-        if args.backend == "chainer":
-            from espnet.asr.chainer_backend.asr import train
-
-            train(args)
-        elif args.backend == "pytorch":
-            from espnet.asr.pytorch_backend.asr import train
-
-            train(args)
-        else:
-            raise ValueError("Only chainer and pytorch are supported.")
+    if args.adv_type == "freelb":
+        from espnet.asr.pytorch_backend.asr_freelb import train
     else:
-        # FIXME(kamo): Support --model-module
-        if args.backend == "pytorch":
-            from espnet.asr.pytorch_backend.asr_mix import train
+        raise ValueError("Not implemented.")
 
-            train(args)
-        else:
-            raise ValueError("Only pytorch is supported.")
+    train(args)
 
 
 if __name__ == "__main__":

@@ -23,9 +23,18 @@ class PositionwiseFeedForward(torch.nn.Module):
         super(PositionwiseFeedForward, self).__init__()
         self.w_1 = torch.nn.Linear(idim, hidden_units)
         self.w_2 = torch.nn.Linear(hidden_units, idim)
-        self.dropout = torch.nn.Dropout(dropout_rate)
+        self.dropout_rate = dropout_rate
         self.activation = activation
 
-    def forward(self, x):
+    def forward(self, x, init_dp=True):
         """Forward funciton."""
-        return self.w_2(self.dropout(self.activation(self.w_1(x))))
+        x = self.activation(self.w_1(x))
+
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask = torch.zeros_like(x).bernoulli_(1 - self.dropout_rate) / (
+                    1 - self.dropout_rate
+                )
+            x = self.dp_mask * x
+
+        return self.w_2(x)

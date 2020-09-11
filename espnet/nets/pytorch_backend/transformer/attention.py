@@ -34,7 +34,7 @@ class MultiHeadedAttention(nn.Module):
         self.linear_v = nn.Linear(n_feat, n_feat)
         self.linear_out = nn.Linear(n_feat, n_feat)
         self.attn = None
-        self.dropout = nn.Dropout(p=dropout_rate)
+        self.dropout_rate = dropout_rate
 
     def forward_qkv(self, query, key, value):
         """Transform query, key and value.
@@ -55,12 +55,13 @@ class MultiHeadedAttention(nn.Module):
 
         return q, k, v
 
-    def forward_attention(self, value, scores, mask):
+    def forward_attention(self, value, scores, mask, init_dp=True):
         """Compute attention context vector.
 
         :param torch.Tensor value: (batch, head, time2, size)
         :param torch.Tensor scores: (batch, head, time1, time2)
         :param torch.Tensor mask: (batch, 1, time2) or (batch, time1, time2)
+        :param bool: whether to init dropout mask by manually
         :return torch.Tensor transformed `value` (batch, time1, d_model)
             weighted by the attention score (batch, time1, time2)
 
@@ -78,7 +79,15 @@ class MultiHeadedAttention(nn.Module):
         else:
             self.attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
 
-        p_attn = self.dropout(self.attn)
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask = torch.zeros_like(self.attn).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            p_attn = self.dp_mask * self.attn
+        else:
+            p_attn = self.attn
+
         x = torch.matmul(p_attn, value)  # (batch, head, time1, d_k)
         x = (
             x.transpose(1, 2).contiguous().view(n_batch, -1, self.h * self.d_k)
@@ -86,19 +95,19 @@ class MultiHeadedAttention(nn.Module):
 
         return self.linear_out(x)  # (batch, time1, d_model)
 
-    def forward(self, query, key, value, mask):
+    def forward(self, query, key, value, mask, init_dp=True):
         """Compute 'Scaled Dot Product Attention'.
 
         :param torch.Tensor query: (batch, time1, size)
         :param torch.Tensor key: (batch, time2, size)
         :param torch.Tensor value: (batch, time2, size)
         :param torch.Tensor mask: (batch, 1, time2) or (batch, time1, time2)
-        :param torch.nn.Dropout dropout:
+        :param bool: whether to init dropout mask by manually
         :return torch.Tensor: attention output (batch, time1, d_model)
         """
         q, k, v = self.forward_qkv(query, key, value)
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
-        return self.forward_attention(v, scores, mask)
+        return self.forward_attention(v, scores, mask, init_dp=init_dp)
 
 
 class RelPositionMultiHeadedAttention(MultiHeadedAttention):

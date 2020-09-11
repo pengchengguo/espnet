@@ -316,12 +316,14 @@ class E2E(ASRInterface, torch.nn.Module):
         # initialize parameters
         initialize(self, args.transformer_init)
 
-    def forward(self, xs_pad, ilens, ys_pad, init_dp=True, record=True):
+    def forward(self, xs_pad, ilens, ys_pad, init_dp=True, dp_idx=0):
         """E2E forward.
 
         :param torch.Tensor xs_pad: batch of padded source sequences (B, Tmax, idim)
         :param torch.Tensor ilens: batch of lengths of source sequences (B)
         :param torch.Tensor ys_pad: batch of padded target sequences (B, Lmax)
+        :param bool: whether to init dropout mask by manually
+        :param int: the index of manual generated dropuout masks
         :return: ctc loss value
         :rtype: torch.Tensor
         :return: attention loss value
@@ -332,7 +334,7 @@ class E2E(ASRInterface, torch.nn.Module):
         # 1. forward encoder
         xs_pad = xs_pad[:, : max(ilens)]  # for data parallel
         src_mask = make_non_pad_mask(ilens.tolist()).to(xs_pad.device).unsqueeze(-2)
-        hs_pad, hs_mask = self.encoder(xs_pad, src_mask, init_dp=init_dp)
+        hs_pad, hs_mask = self.encoder(xs_pad, src_mask, init_dp=init_dp, dp_idx=dp_idx)
         self.hs_pad = hs_pad
 
         # 2. forward decoder
@@ -347,9 +349,7 @@ class E2E(ASRInterface, torch.nn.Module):
                     ys_pad, self.sos, self.eos, self.ignore_id
                 )
                 ys_mask = target_mask(ys_in_pad, self.ignore_id)
-            pred_pad, pred_mask = self.decoder(
-                ys_in_pad, ys_mask, hs_pad, hs_mask, init_dp=init_dp
-            )
+            pred_pad, pred_mask = self.decoder(ys_in_pad, ys_mask, hs_pad, hs_mask)
             self.pred_pad = pred_pad
 
             # 3. compute attention loss
@@ -369,9 +369,7 @@ class E2E(ASRInterface, torch.nn.Module):
         else:
             batch_size = xs_pad.size(0)
             hs_len = hs_mask.view(batch_size, -1).sum(1)
-            loss_ctc = self.ctc(
-                hs_pad.view(batch_size, -1, self.adim), hs_len, ys_pad, init_dp=init_dp
-            )
+            loss_ctc = self.ctc(hs_pad.view(batch_size, -1, self.adim), hs_len, ys_pad)
             if not self.training and self.error_calculator is not None:
                 ys_hat = self.ctc.argmax(hs_pad.view(batch_size, -1, self.adim)).data
                 cer_ctc = self.error_calculator(ys_hat.cpu(), ys_pad.cpu(), is_ctc=True)
@@ -403,10 +401,9 @@ class E2E(ASRInterface, torch.nn.Module):
 
         loss_data = float(self.loss)
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
-            if record:
-                self.reporter.report(
-                    loss_ctc_data, loss_att_data, self.acc, cer_ctc, cer, wer, loss_data
-                )
+            self.reporter.report(
+                loss_ctc_data, loss_att_data, self.acc, cer_ctc, cer, wer, loss_data
+            )
         else:
             logging.warning("loss (=%f) is not correct", loss_data)
         return self.loss

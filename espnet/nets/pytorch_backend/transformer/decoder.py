@@ -89,22 +89,19 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
         torch.nn.Module.__init__(self)
         self._register_load_state_dict_pre_hook(_pre_hook)
         if input_layer == "embed":
-            self.embed = torch.nn.Sequential(
-                torch.nn.Embedding(odim, attention_dim),
-                pos_enc_class(attention_dim, positional_dropout_rate),
-            )
+            self.embed = torch.nn.Embedding(odim, attention_dim)
+            self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         elif input_layer == "linear":
             self.embed = torch.nn.Sequential(
                 torch.nn.Linear(odim, attention_dim),
                 torch.nn.LayerNorm(attention_dim),
                 torch.nn.Dropout(dropout_rate),
                 torch.nn.ReLU(),
-                pos_enc_class(attention_dim, positional_dropout_rate),
             )
+            self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         elif isinstance(input_layer, torch.nn.Module):
-            self.embed = torch.nn.Sequential(
-                input_layer, pos_enc_class(attention_dim, positional_dropout_rate)
-            )
+            self.embed = input_layer
+            self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         else:
             raise NotImplementedError("only `embed` or torch.nn.Module is supported.")
         self.normalize_before = normalize_before
@@ -235,7 +232,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
         else:
             self.output_layer = None
 
-    def forward(self, tgt, tgt_mask, memory, memory_mask):
+    def forward(self, tgt, tgt_mask, memory, memory_mask, init_dp=True):
         """Forward decoder.
 
         :param torch.Tensor tgt: input token ids, int64 (batch, maxlen_out)
@@ -249,6 +246,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
         :param torch.Tensor memory_mask: encoded memory mask,  (batch, maxlen_in)
                                          dtype=torch.uint8 in PyTorch 1.2-
                                          dtype=torch.bool in PyTorch 1.2+ (include 1.2)
+        :param bool: whether to init dropout mask by manually
         :return x: decoded token score before softmax (batch, maxlen_out, token)
                    if use_output_layer is True,
                    final block outputs (batch, maxlen_out, attention_dim)
@@ -258,16 +256,23 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
         :rtype: torch.Tensor
         """
         x = self.embed(tgt)
-        x, tgt_mask, memory, memory_mask = self.decoders(
-            x, tgt_mask, memory, memory_mask
-        )
+        x = self.pos_enc(x, init_dp=init_dp)
+        # x, tgt_mask, memory, memory_mask = self.decoders(
+        #     x, tgt_mask, memory, memory_mask, init_dp=init_dp
+        # )
+
+        for decoder in self.decoders:
+            x, tgt_mask, memory, memory_mask = decoder(
+                x, tgt_mask, memory, memory_mask, init_dp=init_dp
+            )
+
         if self.normalize_before:
             x = self.after_norm(x)
         if self.output_layer is not None:
             x = self.output_layer(x)
         return x, tgt_mask
 
-    def forward_one_step(self, tgt, tgt_mask, memory, cache=None):
+    def forward_one_step(self, tgt, tgt_mask, memory, cache=None, init_dp=True):
         """Forward one step.
 
         :param torch.Tensor tgt: input token ids, int64 (batch, maxlen_out)
@@ -277,17 +282,19 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
         :param torch.Tensor memory: encoded memory, float32  (batch, maxlen_in, feat)
         :param List[torch.Tensor] cache:
             cached output list of (batch, max_time_out-1, size)
+        :param bool: whether to init dropout mask by manually
         :return y, cache: NN output value and cache per `self.decoders`.
             `y.shape` is (batch, maxlen_out, token)
         :rtype: Tuple[torch.Tensor, List[torch.Tensor]]
         """
         x = self.embed(tgt)
+        x = self.pos_enc(x, init_dp=init_dp)
         if cache is None:
             cache = [None] * len(self.decoders)
         new_cache = []
         for c, decoder in zip(cache, self.decoders):
             x, tgt_mask, memory, memory_mask = decoder(
-                x, tgt_mask, memory, None, cache=c
+                x, tgt_mask, memory, None, cache=c, init_dp=init_dp
             )
             new_cache.append(x)
 

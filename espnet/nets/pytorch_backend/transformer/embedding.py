@@ -42,13 +42,19 @@ class PositionalEncoding(torch.nn.Module):
 
     """
 
-    def __init__(self, d_model, dropout_rate, max_len=5000, reverse=False):
+    def __init__(
+        self,
+        d_model,
+        dropout_rate,
+        max_len=5000,
+        reverse=False,
+    ):
         """Construct an PositionalEncoding object."""
         super(PositionalEncoding, self).__init__()
         self.d_model = d_model
         self.reverse = reverse
         self.xscale = math.sqrt(self.d_model)
-        self.dropout = torch.nn.Dropout(p=dropout_rate)
+        self.dropout_rate = dropout_rate
         self.pe = None
         self.extend_pe(torch.tensor(0.0).expand(1, max_len))
         self._register_load_state_dict_pre_hook(_pre_hook)
@@ -76,11 +82,12 @@ class PositionalEncoding(torch.nn.Module):
         pe = pe.unsqueeze(0)
         self.pe = pe.to(device=x.device, dtype=x.dtype)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x, init_dp=True):
         """Add positional encoding.
 
         Args:
             x (torch.Tensor): Input. Its shape is (batch, time, ...)
+            init_dp (bool): whether to init dropout mask by manually
 
         Returns:
             torch.Tensor: Encoded tensor. Its shape is (batch, time, ...)
@@ -88,7 +95,15 @@ class PositionalEncoding(torch.nn.Module):
         """
         self.extend_pe(x)
         x = x * self.xscale + self.pe[:, : x.size(1)]
-        return self.dropout(x)
+
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask = torch.zeros_like(x).bernoulli_(1 - self.dropout_rate) / (
+                    1 - self.dropout_rate
+                )
+            x = self.dp_mask * x
+
+        return x
 
 
 class ScaledPositionalEncoding(PositionalEncoding):
@@ -113,11 +128,12 @@ class ScaledPositionalEncoding(PositionalEncoding):
         """Reset parameters."""
         self.alpha.data = torch.tensor(1.0)
 
-    def forward(self, x):
+    def forward(self, x, init_dp=True):
         """Add positional encoding.
 
         Args:
             x (torch.Tensor): Input. Its shape is (batch, time, ...)
+            init_dp (bool): whether to init dropout mask by manually
 
         Returns:
             torch.Tensor: Encoded tensor. Its shape is (batch, time, ...)
@@ -125,7 +141,15 @@ class ScaledPositionalEncoding(PositionalEncoding):
         """
         self.extend_pe(x)
         x = x + self.alpha * self.pe[:, : x.size(1)]
-        return self.dropout(x)
+
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask = torch.zeros_like(x).bernoulli_(1 - self.dropout_rate) / (
+                    1 - self.dropout_rate
+                )
+            x = self.dp_mask * x
+
+        return x
 
 
 class RelPositionalEncoding(PositionalEncoding):
@@ -149,11 +173,12 @@ class RelPositionalEncoding(PositionalEncoding):
         """
         super().__init__(d_model, dropout_rate, max_len, reverse=True)
 
-    def forward(self, x):
+    def forward(self, x, init_dp=True):
         """Compute positional encoding.
 
         Args:
             x (torch.Tensor): Input. Its shape is (batch, time, ...)
+            init_dp (bool): whether to init dropout mask by manually
 
         Returns:
             torch.Tensor: x. Its shape is (batch, time, ...)
@@ -163,4 +188,19 @@ class RelPositionalEncoding(PositionalEncoding):
         self.extend_pe(x)
         x = x * self.xscale
         pos_emb = self.pe[:, : x.size(1)]
-        return self.dropout(x), self.dropout(pos_emb)
+
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask1 = torch.zeros_like(x).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            x = self.dp_mask1 * x
+
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask2 = torch.zeros_like(x).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            pos_emb = self.dp_mask2 * pos_emb
+
+        return x, pos_emb

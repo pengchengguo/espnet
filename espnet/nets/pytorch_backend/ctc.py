@@ -64,7 +64,7 @@ class CTC(torch.nn.Module):
         else:
             raise NotImplementedError
 
-    def forward(self, hs_pad, hlens, ys_pad):
+    def forward(self, hs_pad, hlens, ys_pad, init_dp=True):
         """CTC forward
 
         :param torch.Tensor hs_pad: batch of padded hidden state sequences (B, Tmax, D)
@@ -82,7 +82,13 @@ class CTC(torch.nn.Module):
         olens = torch.from_numpy(np.fromiter((x.size(0) for x in ys), dtype=np.int32))
 
         # zero padding for hs
-        ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask = torch.zeros_like(hs_pad).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            hs_pad = self.dp_mask * hs_pad
+        ys_hat = self.ctc_lo(hs_pad)
 
         # zero padding for ys
         ys_true = torch.cat(ys).cpu().int()  # batch x olen
