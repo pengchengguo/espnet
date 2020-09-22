@@ -805,7 +805,7 @@ def parse_hypothesis(hyp, char_list):
     return text, token, tokenid, score
 
 
-def add_results_to_json(js, nbest_hyps, char_list):
+def add_results_to_json(js, nbest_hyps, char_list, idx=0):
     """Add N-best results to json.
 
     Args:
@@ -813,6 +813,7 @@ def add_results_to_json(js, nbest_hyps, char_list):
         nbest_hyps_sd (list[dict[str, Any]]):
             List of hypothesis for multi_speakers: nutts x nspkrs.
         char_list (list[str]): List of characters.
+        idx (int): output index
 
     Returns:
         dict[str, Any]: N-best results added utterance dict.
@@ -829,7 +830,7 @@ def add_results_to_json(js, nbest_hyps, char_list):
 
         # copy ground-truth
         if len(js["output"]) > 0:
-            out_dic = dict(js["output"][0].items())
+            out_dic = dict(js["output"][idx].items())
         else:
             # for no reference case (e.g., speech translation)
             out_dic = {"name": ""}
