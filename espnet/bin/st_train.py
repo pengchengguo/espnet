@@ -438,6 +438,33 @@ def get_parser(parser=None, required=True):
     )
     parser.add_argument("--fbank-fmin", type=float, default=0.0, help="")
     parser.add_argument("--fbank-fmax", type=float, default=None, help="")
+    # conditional modle finetuning related
+    parser.add_argument(
+        "--enc-mt-init",
+        default=None,
+        type=str,
+        nargs="?",
+        help="Pre-trained MT model to initialize encoder.",
+    )
+    parser.add_argument(
+        "--enc-mt-init-mods",
+        default="enc_mt.enc_mt.",
+        type=lambda s: [str(mod) for mod in s.split(",") if s != ""],
+        help="List of encoder modules to initialize, separated by a comma.",
+    )
+    parser.add_argument(
+        "--dec-asr-init",
+        default=None,
+        type=str,
+        nargs="?",
+        help="Pre-trained ASR model to initialize decoder.",
+    )
+    parser.add_argument(
+        "--dec-asr-init-mods",
+        default="att., dec.",
+        type=lambda s: [str(mod) for mod in s.split(",") if s != ""],
+        help="List of decoder modules to initialize, separated by a comma.",
+    )
     return parser
 
 

@@ -286,3 +286,104 @@ def load_trained_modules(idim, odim, args, interface=ASRInterface):
     main_model.load_state_dict(main_state_dict)
 
     return main_model
+
+
+def load_trained_modules_conditional(idim, odim, args, interface=ASRInterface):
+    """Load model encoder or/and decoder modules with ESPNET pre-trained model(s).
+
+    Args:
+        idim (int): initial input dimension.
+        odim (int): initial output dimension.
+        args (Namespace): The initial model arguments.
+        interface (Interface): ASRInterface or STInterface or TTSInterface.
+
+    Return:
+        model (torch.nn.Module): The model with pretrained modules.
+
+    """
+
+    def print_new_keys(state_dict, modules, model_path):
+        logging.warning("loading %s from model: %s", modules, model_path)
+
+        for k in state_dict.keys():
+            logging.warning("override %s" % k)
+
+    enc_model_path = args.enc_init
+    dec_model_path = args.dec_init
+    enc_modules = args.enc_init_mods
+    dec_modules = args.dec_init_mods
+    enc_mt_model_path = args.enc_mt_init
+    enc_mt_modules = args.enc_mt_init_mods
+    dec_asr_model_path = args.dec_asr_init
+    dec_asr_modules = args.dec_asr_init_mods
+
+    model_class = dynamic_import(args.model_module)
+    main_model = model_class(idim, odim, args)
+    assert isinstance(main_model, interface)
+
+    main_state_dict = main_model.state_dict()
+
+    logging.warning("model(s) found for pre-initialization")
+    for model_path, modules in [
+        (enc_model_path, enc_modules),
+        (dec_model_path, dec_modules),
+        (enc_mt_model_path, enc_mt_modules),
+        (dec_asr_model_path, dec_asr_modules),
+    ]:
+        if model_path is not None:
+            if os.path.isfile(model_path):
+                model_state_dict, is_lm = get_trained_model_state_dict(model_path)
+
+                modules = filter_modules(model_state_dict, modules)
+                if is_lm:
+                    partial_state_dict, modules = get_partial_lm_state_dict(
+                        model_state_dict, modules
+                    )
+                    print_new_keys(partial_state_dict, modules, model_path)
+                else:
+                    partial_state_dict = get_partial_state_dict(
+                        model_state_dict, modules
+                    )
+
+                    if partial_state_dict:
+                        # change modules for asr decoder and mt encoder
+                        if (
+                            model_path == enc_mt_model_path
+                            and modules == enc_mt_modules
+                        ):
+                            partial_state_dict = {
+                                "encoder_mt."
+                                + n.split(".", 1)[1]: partial_state_dict[n]
+                                for n in partial_state_dict
+                            }
+                            modules = [
+                                "encoder_mt." + n.split(".", 1)[1] for n in modules
+                            ]
+                        if (
+                            model_path == dec_asr_model_path
+                            and modules == dec_asr_modules
+                        ):
+                            partial_state_dict = {
+                                "decoder_asr."
+                                + n.split(".", 1)[1]: partial_state_dict[n]
+                                for n in partial_state_dict
+                            }
+                            modules = [
+                                "decoder_asr." + n.split(".", 1)[1] for n in modules
+                            ]
+                        if transfer_verification(
+                            main_state_dict, partial_state_dict, modules
+                        ):
+                            print_new_keys(partial_state_dict, modules, model_path)
+                            main_state_dict.update(partial_state_dict)
+                        else:
+                            logging.warning(
+                                f"modules {modules} in model {model_path} "
+                                f"don't match your training config",
+                            )
+            else:
+                logging.warning("model was not found : %s", model_path)
+
+    main_model.load_state_dict(main_state_dict)
+
+    return main_model

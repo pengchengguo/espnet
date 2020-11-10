@@ -27,7 +27,7 @@ from espnet.asr.asr_utils import torch_load
 from espnet.asr.asr_utils import torch_resume
 from espnet.asr.asr_utils import torch_snapshot
 from espnet.asr.pytorch_backend.asr_init import load_trained_model
-from espnet.asr.pytorch_backend.asr_init import load_trained_modules
+from espnet.asr.pytorch_backend.asr_init import load_trained_modules_conditional
 
 from espnet.nets.pytorch_backend.e2e_asr import pad_list
 import espnet.nets.pytorch_backend.lm.default as lm_pytorch
@@ -132,19 +132,13 @@ def train(args):
 
     # Initialize with pre-trained ASR encoder and MT decoder
     if args.enc_init is not None or args.dec_init is not None:
-        model = load_trained_modules(idim, odim, args, interface=STInterface)
+        model = load_trained_modules_conditional(
+            idim, odim, args, interface=STInterface
+        )
     else:
         model_class = dynamic_import(args.model_module)
         model = model_class(idim, odim, args)
     assert isinstance(model, STInterface)
-
-    if args.rnnlm is not None:
-        rnnlm_args = get_model_conf(args.rnnlm, args.rnnlm_conf)
-        rnnlm = lm_pytorch.ClassifierWithState(
-            lm_pytorch.RNNLM(len(args.char_list), rnnlm_args.layer, rnnlm_args.unit)
-        )
-        torch_load(args.rnnlm, rnnlm)
-        model.rnnlm = rnnlm
 
     # write model config
     if not os.path.exists(args.outdir):
@@ -230,7 +224,7 @@ def train(args):
     converter = CustomConverter(
         subsampling_factor=model.subsample[0],
         dtype=dtype,
-        use_source_text=args.asr_weight > 0 or args.mt_weight > 0,
+        use_source_text=True,
     )
 
     # read json data
