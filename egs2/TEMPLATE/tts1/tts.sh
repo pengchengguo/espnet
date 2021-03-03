@@ -28,27 +28,28 @@ SECONDS=0
 # General configuration
 stage=1              # Processes starts from the specified stage.
 stop_stage=10000     # Processes is stopped at the specified stage.
-skip_data_prep=false # Skip data preparation stages
-skip_train=false     # Skip training stages
-skip_eval=false      # Skip decoding and evaluation stages
-skip_upload=true     # Skip packing and uploading stages
+skip_data_prep=false # Skip data preparation stages.
+skip_train=false     # Skip training stages.
+skip_eval=false      # Skip decoding and evaluation stages.
+skip_upload=true     # Skip packing and uploading stages.
 ngpu=1               # The number of gpus ("0" uses cpu, otherwise use gpu).
-num_nodes=1          # The number of nodes
+num_nodes=1          # The number of nodes.
 nj=32                # The number of parallel jobs.
 inference_nj=32      # The number of parallel jobs in decoding.
 gpu_inference=false  # Whether to perform gpu decoding.
 dumpdir=dump         # Directory to dump features.
 expdir=exp           # Directory to save experiments.
-python=python3       # Specify python to execute espnet commands
+python=python3       # Specify python to execute espnet commands.
 
 # Data preparation related
 local_data_opts="" # Options to be passed to local/data.sh.
 
 # Feature extraction related
 feats_type=raw       # Feature type (fbank or stft or raw).
-audio_format=flac    # Audio format (only in feats_type=raw).
-min_wav_duration=0.1 # Minimum duration in second
-max_wav_duration=20  # Maximum duration in second
+audio_format=flac    # Audio format: wav, flac, wav.ark, flac.ark  (only in feats_type=raw).
+min_wav_duration=0.1 # Minimum duration in second.
+max_wav_duration=20  # Maximum duration in second.
+use_xvector=false    # Whether to use x-vector (Require Kaldi).
 # Only used for feats_type != raw
 fs=16000          # Sampling rate.
 fmin=80           # Minimum frequency of Mel basis.
@@ -62,8 +63,8 @@ f0min=80          # Maximum f0 for pitch extraction.
 f0max=400         # Minimum f0 for pitch extraction.
 
 oov="<unk>"         # Out of vocabrary symbol.
-blank="<blank>"     # CTC blank symbol
-sos_eos="<sos/eos>" # sos and eos symbole
+blank="<blank>"     # CTC blank symbol.
+sos_eos="<sos/eos>" # sos and eos symbols.
 
 # Training related
 train_config=""    # Config for training.
@@ -71,8 +72,8 @@ train_args=""      # Arguments for training, e.g., "--max_epoch 1".
                    # Note that it will overwrite args in train config.
 tag=""             # Suffix for training directory.
 tts_exp=""         # Specify the direcotry path for experiment. If this option is specified, tag is ignored.
-tts_stats_dir=""   # Specify the direcotry path for statistics. If empty, automatically decided
-num_splits=1       # Number of splitting for tts corpus
+tts_stats_dir=""   # Specify the direcotry path for statistics. If empty, automatically decided.
+num_splits=1       # Number of splitting for tts corpus.
 teacher_dumpdir="" # Directory of teacher outputs (needed if tts=fastspeech).
 write_collected_feats=false # Whether to dump features in stats collection.
 
@@ -81,26 +82,27 @@ inference_config="" # Config for decoding.
 inference_args=""   # Arguments for decoding, e.g., "--threshold 0.75".
                     # Note that it will overwrite args in inference config.
 inference_tag=""    # Suffix for decoding directory.
-inference_model=train.loss.ave.pth # Model path for decoding e.g.,
+inference_model=train.loss.ave.pth # Model path for decoding.
+                                   # e.g.
                                    # inference_model=train.loss.best.pth
                                    # inference_model=3epoch.pth
                                    # inference_model=valid.acc.best.pth
                                    # inference_model=valid.loss.ave.pth
 griffin_lim_iters=4 # the number of iterations of Griffin-Lim.
-download_model=""   # Download a model from Model Zoo and use it for decoding
+download_model=""   # Download a model from Model Zoo and use it for decoding.
 
 # [Task dependent] Set the datadir name created by local/data.sh
 train_set=""     # Name of training set.
-valid_set=""     # Name of validation set used for monitoring/tuning network training
+valid_set=""     # Name of validation set used for monitoring/tuning network training.
 test_sets=""     # Names of test sets. Multiple items (e.g., both dev and eval sets) can be specified.
 srctexts=""      # Texts to create token list. Multiple items can be specified.
 nlsyms_txt=none  # Non-linguistic symbol list (needed if existing).
 token_type=phn   # Transcription type.
 cleaner=tacotron # Text cleaner.
 g2p=g2p_en       # g2p method (needed if token_type=phn).
-lang=noinfo      # The language type of corpus
-text_fold_length=150   # fold_length for text data
-speech_fold_length=800 # fold_length for speech data
+lang=noinfo      # The language type of corpus.
+text_fold_length=150   # fold_length for text data.
+speech_fold_length=800 # fold_length for speech data.
 
 help_message=$(cat << EOF
 Usage: $0 --train-set "<train_set_name>" --valid-set "<valid_set_name>" --test_sets "<test_set_names>" --srctexts "<srctexts>"
@@ -114,7 +116,7 @@ Options:
     --skip_eval      # Skip decoding and evaluation stages (default="${skip_eval}").
     --skip_upload    # Skip packing and uploading stages (default="${skip_upload}").
     --ngpu           # The number of gpus ("0" uses cpu, otherwise use gpu, default="${ngpu}").
-    --num_nodes      # The number of nodes
+    --num_nodes      # The number of nodes (default="${num_nodes}").
     --nj             # The number of parallel jobs (default="${nj}").
     --inference_nj   # The number of parallel jobs in decoding (default="${inference_nj}").
     --gpu_inference  # Whether to perform gpu decoding (default="${gpu_inference}").
@@ -126,36 +128,41 @@ Options:
     --local_data_opts # Options to be passed to local/data.sh (default="${local_data_opts}").
 
     # Feature extraction related
-    --feats_type     # Feature type (fbank or stft or raw, default="${feats_type}").
-    --audio_format   # Audio format (only in feats_type=raw, default="${audio_format}").
+    --feats_type       # Feature type (fbank or stft or raw, default="${feats_type}").
+    --audio_format     # Audio format: wav, flac, wav.ark, flac.ark  (only in feats_type=raw, default="${audio_format}").
     --min_wav_duration # Minimum duration in second (default="${min_wav_duration}").
     --max_wav_duration # Maximum duration in second (default="${max_wav_duration}").
-    --fs             # Sampling rate (default="${fs}").
-    --fmax           # Maximum frequency of Mel basis (default="${fmax}").
-    --fmin           # Minimum frequency of Mel basis (default="${fmin}").
-    --n_mels         # The number of mel basis (default="${n_mels}").
-    --n_fft          # The number of fft points (default="${n_fft}").
-    --n_shift        # The number of shift points (default="${n_shift}").
-    --win_length     # Window length (default="${win_length}").
-    --f0min          # Maximum f0 for pitch extraction (default="${f0min}").
-    --f0max          # Minimum f0 for pitch extraction (default="${f0max}").
-    --oov            # Out of vocabrary symbol (default="${oov}").
-    --blank          # CTC blank symbol (default="${blank}").
-    --sos_eos        # sos and eos symbole (default="${sos_eos}").
+    --use_xvector      # Whether to use X-vector (Require Kaldi, default="${use_xvector}").
+    --fs               # Sampling rate (default="${fs}").
+    --fmax             # Maximum frequency of Mel basis (default="${fmax}").
+    --fmin             # Minimum frequency of Mel basis (default="${fmin}").
+    --n_mels           # The number of mel basis (default="${n_mels}").
+    --n_fft            # The number of fft points (default="${n_fft}").
+    --n_shift          # The number of shift points (default="${n_shift}").
+    --win_length       # Window length (default="${win_length}").
+    --f0min            # Maximum f0 for pitch extraction (default="${f0min}").
+    --f0max            # Minimum f0 for pitch extraction (default="${f0max}").
+    --oov              # Out of vocabrary symbol (default="${oov}").
+    --blank            # CTC blank symbol (default="${blank}").
+    --sos_eos          # sos and eos symbole (default="${sos_eos}").
 
     # Training related
     --train_config  # Config for training (default="${train_config}").
-    --train_args    # Arguments for training, e.g., "--max_epoch 1" (default="${train_args}").
+    --train_args    # Arguments for training (default="${train_args}").
+                    # e.g., --train_args "--max_epoch 1"
                     # Note that it will overwrite args in train config.
     --tag           # Suffix for training directory (default="${tag}").
-    --tts_exp       # Specify the direcotry path for experiment. If this option is specified, tag is ignored (default="${tts_exp}").
-    --tts_stats_dir # Specify the direcotry path for statistics. If empty, automatically decided (default="${tts_stats_dir}").
+    --tts_exp       # Specify the direcotry path for experiment.
+                    # If this option is specified, tag is ignored (default="${tts_exp}").
+    --tts_stats_dir # Specify the direcotry path for statistics.
+                    # If empty, automatically decided (default="${tts_stats_dir}").
     --num_splits    # Number of splitting for tts corpus (default="${num_splits}").
     --write_collected_feats # Whether to dump features in statistics collection (default="${write_collected_feats}").
 
     # Decoding related
     --inference_config  # Config for decoding (default="${inference_config}").
-    --inference_args    # Arguments for decoding, e.g., "--threshold 0.75" (default="${inference_args}").
+    --inference_args    # Arguments for decoding, (default="${inference_args}").
+                        # e.g., --inference_args "--threshold 0.75"
                         # Note that it will overwrite args in inference config.
     --inference_tag     # Suffix for decoding directory (default="${inference_tag}").
     --inference_model   # Model path for decoding (default=${inference_model}).
@@ -349,6 +356,63 @@ if ! "${skip_data_prep}"; then
                 echo "${feats_type}" > "${data_feats}${_suf}/${dset}/feats_type"
             done
         fi
+
+        # Extract X-vector
+        if "${use_xvector}"; then
+            log "Stage 2+: Extract X-vector: data/ -> ${dumpdir}/xvector (Require Kaldi)"
+            # Download X-vector pretrained model
+            xvector_exp=${expdir}/xvector_nnet_1a
+            if [ ! -e "${xvector_exp}" ]; then
+                log "X-vector model does not exist. Download pre-trained model."
+                wget http://kaldi-asr.org/models/8/0008_sitw_v2_1a.tar.gz
+                tar xvf 0008_sitw_v2_1a.tar.gz
+                [ ! -e "${expdir}" ] && mkdir -p "${expdir}"
+                mv 0008_sitw_v2_1a/exp/xvector_nnet_1a "${xvector_exp}"
+                rm -rf 0008_sitw_v2_1a.tar.gz 0008_sitw_v2_1a
+            fi
+
+            # Generate the MFCC features, VAD decision, and X-vector
+            for dset in "${train_set}" "${valid_set}" ${test_sets}; do
+                # 1. Copy datadir and resample to 16k
+                utils/copy_data_dir.sh "data/${dset}" "${dumpdir}/mfcc/${dset}"
+                utils/data/resample_data_dir.sh 16000 "${dumpdir}/mfcc/${dset}"
+
+                # 2. Extract mfcc features
+                _nj=$(min "${nj}" "$(<${dumpdir}/mfcc/${dset}/utt2spk wc -l)")
+                steps/make_mfcc.sh --nj "${_nj}" --cmd "${train_cmd}" \
+                    --write-utt2num-frames true \
+                    --mfcc-config conf/mfcc.conf \
+                    "${dumpdir}/mfcc/${dset}"
+                utils/fix_data_dir.sh "${dumpdir}/mfcc/${dset}"
+
+                # 3. Compute VAD decision
+                sid/compute_vad_decision.sh --nj ${_nj} --cmd "${train_cmd}" \
+                    --vad-config conf/vad.conf \
+                    "${dumpdir}/mfcc/${dset}"
+                utils/fix_data_dir.sh "${dumpdir}/mfcc/${dset}"
+
+                # 4. Extract X-vector
+                sid/nnet3/xvector/extract_xvectors.sh --nj "${_nj}" --cmd "${train_cmd}" \
+                    "${xvector_exp}" \
+                    "${dumpdir}/mfcc/${dset}" \
+                    "${dumpdir}/xvector/${dset}"
+
+                # 5. Filter scp
+                # NOTE(kan-bayashi): Since sometimes mfcc or x-vector extraction is failed,
+                #   the number of utts will be different from the original features (raw or fbank).
+                #   To avoid this mismatch, perform filtering of the original feature scp here.
+                if [ "${dset}" = "${train_set}" ] || [ "${dset}" = "${valid_set}" ]; then
+                    _suf="/org"
+                else
+                    _suf=""
+                fi
+                cp "${data_feats}${_suf}/${dset}"/wav.{scp,scp.bak}
+                <"${data_feats}${_suf}/${dset}/wav.scp.bak" \
+                    utils/filter_scp.pl "${dumpdir}/xvector/${dset}/xvector.scp" \
+                    >"${data_feats}${_suf}/${dset}/wav.scp"
+                utils/fix_data_dir.sh "${data_feats}${_suf}/${dset}"
+            done
+        fi
     fi
 
 
@@ -408,6 +472,14 @@ if ! "${skip_data_prep}"; then
 
             # fix_data_dir.sh leaves only utts which exist in all files
             utils/fix_data_dir.sh "${data_feats}/${dset}"
+
+            # Filter x-vector
+            if "${use_xvector}"; then
+                cp "${dumpdir}/xvector/${dset}"/xvector.{scp,scp.bak}
+                <"${dumpdir}/xvector/${dset}/xvector.scp.bak" \
+                    utils/filter_scp.pl "${data_feats}/${dset}/wav.scp"  \
+                    >"${dumpdir}/xvector/${dset}/xvector.scp"
+            fi
         done
 
         # shellcheck disable=SC2002
@@ -457,8 +529,12 @@ if ! "${skip_train}"; then
         _feats_type="$(<${_train_dir}/feats_type)"
         if [ "${_feats_type}" = raw ]; then
             _scp=wav.scp
-            # "sound" supports "wav", "flac", etc.
-            _type=sound
+            if [[ "${audio_format}" == *ark* ]]; then
+                _type=kaldi_ark
+            else
+                # "sound" supports "wav", "flac", etc.
+                _type=sound
+            fi
             _opts+="--feats_extract fbank "
             _opts+="--feats_extract_conf fs=${fs} "
             _opts+="--feats_extract_conf n_fft=${n_fft} "
@@ -491,6 +567,13 @@ if ! "${skip_train}"; then
             _teacher_valid_dir="${teacher_dumpdir}/${valid_set}"
             _opts+="--train_data_path_and_name_and_type ${_teacher_train_dir}/durations,durations,text_int "
             _opts+="--valid_data_path_and_name_and_type ${_teacher_valid_dir}/durations,durations,text_int "
+        fi
+
+        if "${use_xvector}"; then
+            _xvector_train_dir="${dumpdir}/xvector/${train_set}"
+            _xvector_valid_dir="${dumpdir}/xvector/${valid_set}"
+            _opts+="--train_data_path_and_name_and_type ${_xvector_train_dir}/xvector.scp,spembs,kaldi_ark "
+            _opts+="--valid_data_path_and_name_and_type ${_xvector_valid_dir}/xvector.scp,spembs,kaldi_ark "
         fi
 
         # 1. Split the key file
@@ -543,7 +626,7 @@ if ! "${skip_train}"; then
                 --train_shape_file "${_logdir}/train.JOB.scp" \
                 --valid_shape_file "${_logdir}/valid.JOB.scp" \
                 --output_dir "${_logdir}/stats.JOB" \
-                ${_opts} ${train_args}
+                ${_opts} ${train_args} || { cat "${_logdir}"/stats.1.log; exit 1; }
 
         # 4. Aggregate shape files
         _opts=
@@ -727,6 +810,14 @@ if ! "${skip_train}"; then
             _opts+="--energy_normalize_conf stats_file=${tts_stats_dir}/train/energy_stats.npz "
         fi
 
+        # Add X-vector to the inputs if needed
+        if "${use_xvector}"; then
+            _xvector_train_dir="${dumpdir}/xvector/${train_set}"
+            _xvector_valid_dir="${dumpdir}/xvector/${valid_set}"
+            _opts+="--train_data_path_and_name_and_type ${_xvector_train_dir}/xvector.scp,spembs,kaldi_ark "
+            _opts+="--valid_data_path_and_name_and_type ${_xvector_valid_dir}/xvector.scp,spembs,kaldi_ark "
+        fi
+
         log "Generate '${tts_exp}/run.sh'. You can resume the process from stage 6 using this script"
         mkdir -p "${tts_exp}"; echo "${run_args} --stage 6 \"\$@\"; exit \$?" > "${tts_exp}/run.sh"; chmod +x "${tts_exp}/run.sh"
 
@@ -819,7 +910,12 @@ if ! "${skip_eval}"; then
 
         # NOTE(kamo): If feats_type=raw, vocoder_conf is unnecessary
         _scp=wav.scp
-        _type=sound
+        if [[ "${audio_format}" == *ark* ]]; then
+            _type=kaldi_ark
+        else
+            # "sound" supports "wav", "flac", etc.
+            _type=sound
+        fi
         if [ "${_feats_type}" = fbank ] || [ "${_feats_type}" = stft ]; then
             _opts+="--vocoder_conf n_fft=${n_fft} "
             _opts+="--vocoder_conf n_shift=${n_shift} "
@@ -856,6 +952,12 @@ if ! "${skip_eval}"; then
                     _scp=feats.scp
                     _type=npy
                 fi
+            fi
+
+            # Add X-vector to the inputs if needed
+            if "${use_xvector}"; then
+                _xvector_dir="${dumpdir}/xvector/${dset}"
+                _ex_opts+="--data_path_and_name_and_type ${_xvector_dir}/xvector.scp,spembs,kaldi_ark "
             fi
 
             # 0. Copy feats_type
@@ -940,10 +1042,17 @@ if ! "${skip_upload}"; then
         if [ -e "${tts_stats_dir}/train/energy_stats.npz" ]; then
             _opts+=" --option ${tts_stats_dir}/train/energy_stats.npz"
         fi
+        if "${use_xvector}"; then
+            for dset in "${train_set}" ${test_sets}; do
+                _opts+=" --option ${dumpdir}/xvector/${dset}/spk_xvector.scp"
+                _opts+=" --option ${dumpdir}/xvector/${dset}/spk_xvector.ark"
+            done
+        fi
         ${python} -m espnet2.bin.pack tts \
             --train_config "${tts_exp}"/config.yaml \
             --model_file "${tts_exp}"/"${inference_model}" \
-            --option ${tts_stats_dir}/train/feats_stats.npz  \
+            --option "${tts_stats_dir}"/train/feats_stats.npz  \
+            --option "${tts_exp}"/images  \
             --outpath "${packed_model}" \
             ${_opts}
 

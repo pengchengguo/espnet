@@ -3,7 +3,7 @@
 CHAINER_VERSION := 6.0.0
 # Disable cupy installation
 NO_CUPY :=
-# PyTorch version: 0.4.1, 1.0.0, 1.0.1, 1.1.0, 1.2.0, 1.3.0, 1.3.1, 1.4.0, 1.5.0, 1.5.1, 1.6.0
+# PyTorch version: 0.4.1, 1.0.0, 1.0.1, 1.1.0, 1.2.0, 1.3.0, 1.3.1, 1.4.0, 1.5.0, 1.5.1, 1.6.0, 1.7.0, 1.7.1
 TH_VERSION := 1.4.0
 WGET := wget --tries=3
 
@@ -29,8 +29,12 @@ ifeq ($(strip $(CPU_ONLY)),)
 # Derive CUDA version from nvcc
 CUDA_VERSION = $(shell nvcc --version | grep "Cuda compilation tools" | cut -d" " -f5 | sed s/,//)
 CUDA_VERSION_WITHOUT_DOT = $(strip $(subst .,,$(CUDA_VERSION)))
-CONDA_PYTORCH := pytorch=$(TH_VERSION) cudatoolkit=$(CUDA_VERSION)
 PIP_PYTORCH := torch==$(TH_VERSION) -f https://download.pytorch.org/whl/cu$(CUDA_VERSION_WITHOUT_DOT)/torch_stable.html
+ifeq ($(strip $(CUDA_VERSION_WITHOUT_DOT)),80)
+CONDA_PYTORCH := pytorch=$(TH_VERSION) cuda$(CUDA_VERSION_WITHOUT_DOT)
+else
+CONDA_PYTORCH := pytorch=$(TH_VERSION) cudatoolkit=$(CUDA_VERSION)
+endif
 
 else
 CONDA_PYTORCH := pytorch=$(TH_VERSION) cpuonly
@@ -50,15 +54,16 @@ PIP_CHAINER := chainer==$(CHAINER_VERSION)
 all: kaldi showenv python conda_packages.done sctk.done sph2pipe.done check_install
 
 ifneq ($(strip $(CHAINER_VERSION)),)
-python: activate_python.sh warp-ctc.done warp-transducer.done espnet.done pytorch.done chainer_ctc.done chainer.done
+python: activate_python.sh espnet.done pytorch.done chainer.done
+extra: warp-ctc.done warp-transducer.done chainer_ctc.done nkf.done moses.done mwerSegmenter.done pesq kenlm.done pyopenjtalk.done py3mmseg.done beamformit.done fairseq.done
 else
-python: activate_python.sh warp-ctc.done warp-transducer.done espnet.done pytorch.done
+python: activate_python.sh espnet.done pytorch.done
+extra: warp-ctc.done warp-transducer.done nkf.done moses.done mwerSegmenter.done pesq kenlm.done pyopenjtalk.done py3mmseg.done beamformit.done fairseq.done
 endif
 
-extra: nkf.done moses.done mwerSegmenter.done pesq kenlm.done pyopenjtalk.done
 
 kaldi:
-	test -f kaldi/egs/wsj/s5/utils/parse_options.sh || { echo -e "Error: Put Kaldi here!\n    $$ ln -s <kaldi-root> kaldi"; exit 1; }
+	test -f kaldi/egs/wsj/s5/utils/parse_options.sh || git clone --depth 1 https://github.com/kaldi-asr/kaldi
 
 activate_python.sh:
 	test -f activate_python.sh || { echo "Error: Run ./setup_python.sh or ./setup_anaconda.sh"; exit 1; }
@@ -66,7 +71,6 @@ activate_python.sh:
 ################ Logging ################
 showenv: activate_python.sh
 ifeq ($(strip $(CPU_ONLY)),)
-	[ -n "${CUDA_HOME}" ] || { echo -e "Error: CUDA_HOME is not set.\n    $$ . ./setup_cuda_env.sh <cuda-root>"; exit 1; }
 	@echo CUDA_VERSION=$(CUDA_VERSION)
 	. ./activate_python.sh && python3 check_pytorch_cuda_compatibility.py $(TH_VERSION) ${CUDA_VERSION} || { echo "Change TH_VERSION or CUDA_VERSION"; exit 1; }
 else
@@ -98,7 +102,7 @@ sox.done: activate_python.sh
 	. ./activate_python.sh && { command -v sox || conda install -y sox -c conda-forge; }
 	touch sox.done
 sndfile.done: activate_python.sh
-	. ./activate_python.sh && { python3 -c "from ctypes.util import find_library as F; assert F('sndfile') is not None" || conda install -y libsndfile -c conda-forge; }
+	. ./activate_python.sh && { python3 -c "from ctypes.util import find_library as F; assert F('sndfile') is not None" || conda install -y libsndfile=1.0.28 -c conda-forge; }
 	touch sndfile.done
 ifneq ($(strip $(IS_CONDA)),)
 conda_packages.done: cmake.done flac.done ffmpeg.done sox.done sndfile.done
@@ -129,7 +133,7 @@ endif
 
 # NOTE(kamo): conda_packages is not necessary for installation of espnet, but add it the dependencies just in case.
 espnet.done: pytorch.done conda_packages.done
-	. ./activate_python.sh && python3 -m pip install -e ..  # Install editable mode by default
+	. ./activate_python.sh && python3 -m pip install -e "..[recipe]"  # Install editable mode by default
 	touch espnet.done
 
 chainer.done: espnet.done
@@ -144,18 +148,35 @@ else
 			python3 -m pip install $(PIP_CHAINER) cupy==$(CHAINER_VERSION); \
 		fi
 endif
+	# chainer=6.0.0 depends on typing<=3.6.6, but this causes the following error when installing some modules. e.g. fairseq
+	# AttributeError: type object 'Callable' has no attribute '_abc_registry'
+	# "typing" modules is not required for python>=3.6, so uninstall here
+	python3 -m pip uninstall -y typing
 	touch chainer.done
 
 # NOTE(kamo): Add conda_packages.done if cmake is used
 warp-ctc.done: pytorch.done conda_packages.done
+ifeq ($(strip $(CPU_ONLY)),)
+	[ -n "${CUDA_HOME}" ] || { echo -e "Error: CUDA_HOME is not set.\n    $$ . ./setup_cuda_env.sh <cuda-root>"; exit 1; }
+endif
 	. ./activate_python.sh && ./installers/install_warp-ctc.sh
 	touch warp-ctc.done
 
 warp-transducer.done: pytorch.done conda_packages.done
+ifeq ($(strip $(CPU_ONLY)),)
+	[ -n "${CUDA_HOME}" ] || { echo -e "Error: CUDA_HOME is not set.\n    $$ . ./setup_cuda_env.sh <cuda-root>"; exit 1; }
+	. ./activate_python.sh && ./installers/install_warp-transducer.sh
+	. ./activate_python.sh &&  ./installers/install_warp-rnnt.sh $(CUDA_VERSION)
+	touch warp-transducer.done
+else
 	. ./activate_python.sh && ./installers/install_warp-transducer.sh
 	touch warp-transducer.done
+endif
 
 chainer_ctc.done: chainer.done
+ifeq ($(strip $(CPU_ONLY)),)
+	[ -n "${CUDA_HOME}" ] || { echo -e "Error: CUDA_HOME is not set.\n    $$ . ./setup_cuda_env.sh <cuda-root>"; exit 1; }
+endif
 	. ./activate_python.sh && ./installers/install_chainer_ctc.sh
 	touch chainer_ctc.done
 
@@ -183,34 +204,29 @@ pesq: PESQ/P862_annex_A_2005_CD/source/PESQ
 PESQ/P862_annex_A_2005_CD/source/PESQ:
 	./installers/install_pesq.sh
 
+py3mmseg.done: espnet.done
+	. ./activate_python.sh && ./installers/install_py3mmseg.sh
+	touch py3mmseg.done
+
+beamformit.done:
+	./installers/install_beamformit.sh
+	touch beamformit.done
+
+fairseq.done: espnet.done
+	. ./activate_python.sh && ./installers/install_fairseq.sh
+	touch fairseq.done
 
 check_install: python
-ifeq ($(strip $(CPU_ONLY)),)
-
-ifneq ($(strip $(NO_CUPY)),)
-	. ./activate_python.sh; python3 check_install.py --no-cupy
-else
-	. ./activate_python.sh; python3 check_install.py
-endif
-
-else
-
-ifneq ($(strip $(NO_CUPY)),)
-	. ./activate_python.sh; python3 check_install.py --no-cuda --no-cupy
-else
-	. ./activate_python.sh; python3 check_install.py --no-cuda
-endif
-
-endif
+	. ./activate_python.sh; . ./extra_path.sh; python3 check_install.py
 
 
 clean: clean_extra
-	rm -rf warp-ctc warp-transducer chainer_ctc
+	rm -rf warp-ctc warp-transducer warp-rnnt chainer_ctc
 	rm -rf *.done
 	find . -iname "*.pyc" -delete
 
 clean_python:
-	rm -rf warp-ctc warp-transducer chainer_ctc
+	rm -rf warp-ctc warp-transducer warp-rnnt chainer_ctc
 	rm -f warp-ctc.done chainer_ctc.done espnet.done chainer.done pytorch.done warp-transducer.done
 	find . -iname "*.pyc" -delete
 

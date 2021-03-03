@@ -1,7 +1,6 @@
 from abc import ABC
 from abc import abstractmethod
 import argparse
-from contextlib import contextmanager
 from dataclasses import dataclass
 from distutils.version import LooseVersion
 import functools
@@ -27,20 +26,20 @@ import torch.optim
 from torch.utils.data import DataLoader
 from typeguard import check_argument_types
 from typeguard import check_return_type
+import wandb
 import yaml
 
+from espnet import __version__
 from espnet.utils.cli_utils import get_commandline_args
 from espnet2.iterators.abs_iter_factory import AbsIterFactory
 from espnet2.iterators.chunk_iter_factory import ChunkIterFactory
 from espnet2.iterators.multiple_iter_factory import MultipleIterFactory
 from espnet2.iterators.sequence_iter_factory import SequenceIterFactory
-from espnet2.main_funcs.average_nbest_models import average_nbest_models
 from espnet2.main_funcs.collect_stats import collect_stats
 from espnet2.optimizers.sgd import SGD
 from espnet2.samplers.build_batch_sampler import BATCH_TYPES
 from espnet2.samplers.build_batch_sampler import build_batch_sampler
 from espnet2.samplers.unsorted_batch_sampler import UnsortedBatchSampler
-from espnet2.schedulers.abs_scheduler import AbsScheduler
 from espnet2.schedulers.noam_lr import NoamLR
 from espnet2.schedulers.warmup_lr import WarmupLR
 from espnet2.torch_utils.load_pretrained_model import load_pretrained_model
@@ -59,7 +58,6 @@ from espnet2.train.distributed_utils import get_node_rank
 from espnet2.train.distributed_utils import get_num_nodes
 from espnet2.train.distributed_utils import resolve_distributed_mode
 from espnet2.train.iterable_dataset import IterableESPnetDataset
-from espnet2.train.reporter import Reporter
 from espnet2.train.trainer import Trainer
 from espnet2.utils.build_dataclass import build_dataclass
 from espnet2.utils import config_argparse
@@ -125,15 +123,10 @@ try:
     del apex
 except ImportError:
     pass
-if LooseVersion(torch.__version__) >= LooseVersion("1.6.0"):
-    from torch.cuda.amp import GradScaler
-else:
-    # Nothing to do if torch<1.6.0
-    @contextmanager
-    def autocast(enabled=True):
-        yield
-
-    GradScaler = None
+try:
+    import fairscale
+except ImportError:
+    fairscale = None
 
 
 scheduler_classes = dict(
@@ -171,6 +164,7 @@ class IteratorOptions:
     batch_bins: int
     batch_type: str
     max_cache_size: float
+    max_cache_fd: int
     distributed: bool
     num_batches: Optional[int]
     num_iters_per_epoch: Optional[int]
@@ -398,6 +392,19 @@ class AbsTask(ABC):
             "fastest way to use PyTorch for either single node or "
             "multi node data parallel training",
         )
+        group.add_argument(
+            "--unused_parameters",
+            type=str2bool,
+            default=False,
+            help="Whether to use the find_unused_parameters in "
+            "torch.nn.parallel.DistributedDataParallel ",
+        )
+        group.add_argument(
+            "--sharded_ddp",
+            default=False,
+            type=str2bool,
+            help="Enable sharded training provided by fairscale",
+        )
 
         group = parser.add_argument_group("cudnn mode related")
         group.add_argument(
@@ -494,6 +501,12 @@ class AbsTask(ABC):
             help="Gradient norm threshold to clip",
         )
         group.add_argument(
+            "--grad_clip_type",
+            type=float,
+            default=2.0,
+            help="The type of the used p-norm for gradient clip. Can be inf",
+        )
+        group.add_argument(
             "--grad_noise",
             type=str2bool,
             default=False,
@@ -539,10 +552,66 @@ class AbsTask(ABC):
             "training phase. If None is given, it is decided according the number "
             "of training samples automatically .",
         )
+        group.add_argument(
+            "--use_tensorboard",
+            type=str2bool,
+            default=True,
+            help="Enable tensorboard logging",
+        )
+        group.add_argument(
+            "--use_wandb",
+            type=str2bool,
+            default=False,
+            help="Enable wandb logging",
+        )
+        group.add_argument(
+            "--wandb_project",
+            type=str,
+            default=None,
+            help="Specify wandb project",
+        )
+        group.add_argument(
+            "--wandb_id",
+            type=str,
+            default=None,
+            help="Specify wandb id",
+        )
+        group.add_argument(
+            "--detect_anomaly",
+            type=str2bool,
+            default=False,
+            help="Set torch.autograd.set_detect_anomaly",
+        )
 
         group = parser.add_argument_group("Pretraining model related")
-        group.add_argument("--pretrain_path", type=str, default=[], nargs="*")
-        group.add_argument("--pretrain_key", type=str_or_none, default=[], nargs="*")
+        group.add_argument("--pretrain_path", help="This option is obsoleted")
+        group.add_argument(
+            "--init_param",
+            type=str,
+            default=[],
+            nargs="*",
+            help="Specify the file path used for initialization of parameters. "
+            "The format is '<file_path>:<src_key>:<dst_key>:<exclude_keys>', "
+            "where file_path is the model file path, "
+            "src_key specifies the key of model states to be used in the model file, "
+            "dst_key specifies the attribute of the model to be initialized, "
+            "and exclude_keys excludes keys of model states for the initialization."
+            "e.g.\n"
+            "  # Load all parameters"
+            "  --init_param some/where/model.pth\n"
+            "  # Load only decoder parameters"
+            "  --init_param some/where/model.pth:decoder:decoder\n"
+            "  # Load only decoder parameters excluding decoder.embed"
+            "  --init_param some/where/model.pth:decoder:decoder:decoder.embed\n"
+            "  --init_param some/where/model.pth:decoder:decoder:decoder.embed\n",
+        )
+        group.add_argument(
+            "--freeze_param",
+            type=str,
+            default=[],
+            nargs="*",
+            help="Freeze parameters",
+        )
 
         group = parser.add_argument_group("BatchSampler related")
         group.add_argument(
@@ -689,6 +758,14 @@ class AbsTask(ABC):
             help="The maximum cache size for data loader. e.g. 10MB, 20GB.",
         )
         group.add_argument(
+            "--max_cache_fd",
+            type=int,
+            default=32,
+            help="The maximum number of file descriptors to be kept "
+            "as opened for ark files. "
+            "This feature is only valid when data type is 'kaldi_ark'.",
+        )
+        group.add_argument(
             "--valid_max_cache_size",
             type=humanfriendly_parse_size_or_none,
             default=None,
@@ -746,7 +823,15 @@ class AbsTask(ABC):
         optim_class = optim_classes.get(args.optim)
         if optim_class is None:
             raise ValueError(f"must be one of {list(optim_classes)}: {args.optim}")
-        optim = optim_class(model.parameters(), **args.optim_conf)
+        if args.sharded_ddp:
+            if fairscale is None:
+                raise RuntimeError("Requiring fairscale. Do 'pip install fairscale'")
+            optim = fairscale.optim.oss.OSS(
+                params=model.parameters(), optim=optim_class, **args.optim_conf
+            )
+        else:
+            optim = optim_class(model.parameters(), **args.optim_conf)
+
         optimizers = [optim]
         return optimizers
 
@@ -813,10 +898,6 @@ class AbsTask(ABC):
         for k in vars(args):
             if "-" in k:
                 raise RuntimeError(f'Use "_" instead of "-": parser.get_parser("{k}")')
-        if len(args.pretrain_path) != len(args.pretrain_key):
-            raise RuntimeError(
-                "The number of --pretrain_path and --pretrain_key must be same"
-            )
 
         required = ", ".join(
             f"--{a}" for a in args.required if getattr(args, a) is None
@@ -867,35 +948,6 @@ class AbsTask(ABC):
                         f'for {cls.__name__}: "{k}" is not allowed.\n{mes}'
                     )
 
-    @staticmethod
-    def resume(
-        checkpoint: Union[str, Path],
-        model: torch.nn.Module,
-        reporter: Reporter,
-        optimizers: Sequence[torch.optim.Optimizer],
-        schedulers: Sequence[Optional[AbsScheduler]],
-        scaler: Optional[GradScaler],
-        ngpu: int = 0,
-    ):
-        states = torch.load(
-            checkpoint,
-            map_location=f"cuda:{torch.cuda.current_device()}" if ngpu > 0 else "cpu",
-        )
-        model.load_state_dict(states["model"])
-        reporter.load_state_dict(states["reporter"])
-        for optimizer, state in zip(optimizers, states["optimizers"]):
-            optimizer.load_state_dict(state)
-        for scheduler, state in zip(schedulers, states["schedulers"]):
-            if scheduler is not None:
-                scheduler.load_state_dict(state)
-        if scaler is not None:
-            if states["scaler"] is None:
-                logging.warning("scaler state is not found")
-            else:
-                scaler.load_state_dict(states["scaler"])
-
-        logging.info(f"The training was resumed using {checkpoint}")
-
     @classmethod
     def print_config(cls, file=sys.stdout) -> None:
         assert check_argument_types()
@@ -905,16 +957,14 @@ class AbsTask(ABC):
 
     @classmethod
     def main(cls, args: argparse.Namespace = None, cmd: Sequence[str] = None):
-        if cls.num_optimizers != cls.trainer.num_optimizers:
-            raise RuntimeError(
-                f"Task.num_optimizers != Task.trainer.num_optimizers: "
-                f"{cls.num_optimizers} != {cls.trainer.num_optimizers}"
-            )
         assert check_argument_types()
         print(get_commandline_args(), file=sys.stderr)
         if args is None:
             parser = cls.get_parser()
             args = parser.parse_args(cmd)
+        args.version = __version__
+        if args.pretrain_path is not None:
+            raise RuntimeError("--pretrain_path is deprecated. Use --init_param")
         if args.print_config:
             cls.print_config()
             sys.exit(0)
@@ -1017,6 +1067,9 @@ class AbsTask(ABC):
         torch.backends.cudnn.enabled = args.cudnn_enabled
         torch.backends.cudnn.benchmark = args.cudnn_benchmark
         torch.backends.cudnn.deterministic = args.cudnn_deterministic
+        if args.detect_anomaly:
+            logging.info("Invoking torch.autograd.set_detect_anomaly(True)")
+            torch.autograd.set_detect_anomaly(args.detect_anomaly)
 
         # 2. Build model
         model = cls.build_model(args=args)
@@ -1028,6 +1081,11 @@ class AbsTask(ABC):
             dtype=getattr(torch, args.train_dtype),
             device="cuda" if args.ngpu > 0 else "cpu",
         )
+        for t in args.freeze_param:
+            for k, p in model.named_parameters():
+                if k.startswith(t + ".") or k == t:
+                    logging.info(f"Setting {k}.requires_grad = False")
+                    p.requires_grad = False
 
         # 3. Build optimizer
         optimizers = cls.build_optimizers(args, model=model)
@@ -1070,40 +1128,16 @@ class AbsTask(ABC):
                 yaml_no_alias_safe_dump(vars(args), f, indent=4, sort_keys=False)
 
         # 6. Loads pre-trained model
-        for p, k in zip(args.pretrain_path, args.pretrain_key):
+        for p in args.init_param:
+            logging.info(f"Loading pretrained params from {p}")
             load_pretrained_model(
                 model=model,
-                # Directly specify the model path e.g. exp/train/loss.best.pt
-                pretrain_path=p,
-                # if pretrain_key is None -> model
-                # elif pretrain_key is str e.g. "encoder" -> model.encoder
-                pretrain_key=k,
+                init_param=p,
                 # NOTE(kamo): "cuda" for torch.load always indicates cuda:0
                 #   in PyTorch<=1.4
                 map_location=f"cuda:{torch.cuda.current_device()}"
                 if args.ngpu > 0
                 else "cpu",
-            )
-
-        # 7. Resume the training state from the previous epoch
-        reporter = Reporter()
-        if args.use_amp:
-            if LooseVersion(torch.__version__) < LooseVersion("1.6.0"):
-                raise RuntimeError(
-                    "Require torch>=1.6.0 for  Automatic Mixed Precision"
-                )
-            scaler = GradScaler()
-        else:
-            scaler = None
-        if args.resume and (output_dir / "checkpoint.pth").exists():
-            cls.resume(
-                checkpoint=output_dir / "checkpoint.pth",
-                model=model,
-                optimizers=optimizers,
-                schedulers=schedulers,
-                reporter=reporter,
-                scaler=scaler,
-                ngpu=args.ngpu,
             )
 
         if args.dry_run:
@@ -1156,7 +1190,7 @@ class AbsTask(ABC):
             )
         else:
 
-            # 8. Build iterator factories
+            # 7. Build iterator factories
             if args.multiple_iterator:
                 train_iter_factory = cls.build_multiple_iter_factory(
                     args=args,
@@ -1183,19 +1217,41 @@ class AbsTask(ABC):
             else:
                 plot_attention_iter_factory = None
 
-            # 9. Start training
+            # 8. Start training
+            if args.use_wandb:
+                if (
+                    not distributed_option.distributed
+                    or distributed_option.dist_rank == 0
+                ):
+                    if args.wandb_project is None:
+                        project = (
+                            "ESPnet_"
+                            + cls.__name__
+                            + str(Path(".").resolve()).replace("/", "_")
+                        )
+                    else:
+                        project = args.wandb_project
+                    if args.wandb_id is None:
+                        wandb_id = str(output_dir).replace("/", "_")
+                    else:
+                        wandb_id = args.wandb_id
+
+                    wandb.init(
+                        project=project,
+                        dir=output_dir,
+                        id=wandb_id,
+                        resume="allow",
+                    )
+                    wandb.config.update(args)
+                else:
+                    # wandb also supports grouping for distributed training,
+                    # but we only logs aggregated data,
+                    # so it's enough to perform on rank0 node.
+                    args.use_wandb = False
+
             # Don't give args to trainer.run() directly!!!
             # Instead of it, define "Options" object and build here.
             trainer_options = cls.trainer.build_options(args)
-
-            if isinstance(args.keep_nbest_models, int):
-                keep_nbest_models = args.keep_nbest_models
-            else:
-                if len(args.keep_nbest_models) == 0:
-                    logging.warning("No keep_nbest_models is given. Change to [1]")
-                    args.keep_nbest_models = [1]
-                keep_nbest_models = max(args.keep_nbest_models)
-
             cls.trainer.run(
                 model=model,
                 optimizers=optimizers,
@@ -1203,28 +1259,9 @@ class AbsTask(ABC):
                 train_iter_factory=train_iter_factory,
                 valid_iter_factory=valid_iter_factory,
                 plot_attention_iter_factory=plot_attention_iter_factory,
-                reporter=reporter,
-                scaler=scaler,
-                output_dir=output_dir,
-                max_epoch=args.max_epoch,
-                seed=args.seed,
-                patience=args.patience,
-                keep_nbest_models=keep_nbest_models,
-                early_stopping_criterion=args.early_stopping_criterion,
-                best_model_criterion=args.best_model_criterion,
-                val_scheduler_criterion=args.val_scheduler_criterion,
                 trainer_options=trainer_options,
                 distributed_option=distributed_option,
             )
-
-            if not distributed_option.distributed or distributed_option.dist_rank == 0:
-                # Generated n-best averaged model
-                average_nbest_models(
-                    reporter=reporter,
-                    output_dir=output_dir,
-                    best_model_criterion=args.best_model_criterion,
-                    nbest=args.keep_nbest_models,
-                )
 
     @classmethod
     def build_iter_options(
@@ -1242,6 +1279,7 @@ class AbsTask(ABC):
             batch_bins = args.batch_bins
             batch_type = args.batch_type
             max_cache_size = args.max_cache_size
+            max_cache_fd = args.max_cache_fd
             distributed = distributed_option.distributed
             num_batches = None
             num_iters_per_epoch = args.num_iters_per_epoch
@@ -1270,6 +1308,7 @@ class AbsTask(ABC):
                 max_cache_size = 0.05 * args.max_cache_size
             else:
                 max_cache_size = args.valid_max_cache_size
+            max_cache_fd = args.max_cache_fd
             distributed = distributed_option.distributed
             num_batches = None
             num_iters_per_epoch = None
@@ -1284,6 +1323,7 @@ class AbsTask(ABC):
             batch_size = 1
             batch_bins = 0
             num_batches = args.num_att_plot
+            max_cache_fd = args.max_cache_fd
             # num_att_plot should be a few sample ~ 3, so cache all data.
             max_cache_size = np.inf if args.max_cache_size != 0.0 else 0.0
             # always False because plot_attention performs on RANK0
@@ -1303,6 +1343,7 @@ class AbsTask(ABC):
             batch_bins=batch_bins,
             num_batches=num_batches,
             max_cache_size=max_cache_size,
+            max_cache_fd=max_cache_fd,
             distributed=distributed,
             num_iters_per_epoch=num_iters_per_epoch,
             train=train,
@@ -1380,11 +1421,23 @@ class AbsTask(ABC):
             float_dtype=args.train_dtype,
             preprocess=iter_options.preprocess_fn,
             max_cache_size=iter_options.max_cache_size,
+            max_cache_fd=iter_options.max_cache_fd,
         )
         cls.check_task_requirements(
             dataset, args.allow_variable_data_keys, train=iter_options.train
         )
 
+        if Path(
+            Path(iter_options.data_path_and_name_and_type[0][0]).parent, "utt2category"
+        ).exists():
+            utt2category_file = str(
+                Path(
+                    Path(iter_options.data_path_and_name_and_type[0][0]).parent,
+                    "utt2category",
+                )
+            )
+        else:
+            utt2category_file = None
         batch_sampler = build_batch_sampler(
             type=iter_options.batch_type,
             shape_files=iter_options.shape_files,
@@ -1397,6 +1450,7 @@ class AbsTask(ABC):
             min_batch_size=torch.distributed.get_world_size()
             if iter_options.distributed
             else 1,
+            utt2category_file=utt2category_file,
         )
 
         batches = list(batch_sampler)
@@ -1448,6 +1502,7 @@ class AbsTask(ABC):
             float_dtype=args.train_dtype,
             preprocess=iter_options.preprocess_fn,
             max_cache_size=iter_options.max_cache_size,
+            max_cache_fd=iter_options.max_cache_fd,
         )
         cls.check_task_requirements(
             dataset, args.allow_variable_data_keys, train=iter_options.train
@@ -1655,7 +1710,10 @@ class AbsTask(ABC):
                 preprocess=preprocess_fn,
                 key_file=key_file,
             )
-            kwargs.update(batch_size=batch_size)
+            if dataset.apply_utt2category:
+                kwargs.update(batch_size=1)
+            else:
+                kwargs.update(batch_size=batch_size)
         else:
             dataset = ESPnetDataset(
                 data_path_and_name_and_type,

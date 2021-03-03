@@ -165,6 +165,10 @@ class E2E(ASRInterface, torch.nn.Module):
         )
         return parser
 
+    def get_total_subsampling_factor(self):
+        """Get total subsampling factor."""
+        return self.enc.conv_subsampling_factor * int(np.prod(self.subsample))
+
     def __init__(self, idim, odim, args):
         """Initialize multi-speaker E2E module."""
         super(E2E, self).__init__()
@@ -799,7 +803,7 @@ class EncoderMix(torch.nn.Module):
                 xs_pad_sd[ns], ilens_sd[ns], _ = module(xs_pad_sd[ns], ilens_sd[ns])
 
         # make mask to remove bias value in padded part
-        mask = to_device(self, make_pad_mask(ilens_sd[0]).unsqueeze(-1))
+        mask = to_device(xs_pad, make_pad_mask(ilens_sd[0]).unsqueeze(-1))
 
         return [x.masked_fill(mask, 0.0) for x in xs_pad_sd], ilens_sd, None
 

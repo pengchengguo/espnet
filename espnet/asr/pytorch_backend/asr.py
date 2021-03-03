@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# encoding: utf-8
-
 # Copyright 2017 Johns Hopkins University (Shinji Watanabe)
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
@@ -38,6 +35,7 @@ from espnet.asr.pytorch_backend.asr_init import load_trained_model
 from espnet.asr.pytorch_backend.asr_init import load_trained_modules
 import espnet.lm.pytorch_backend.extlm as extlm_pytorch
 from espnet.nets.asr_interface import ASRInterface
+from espnet.nets.beam_search_transducer import BeamSearchTransducer
 from espnet.nets.pytorch_backend.e2e_asr import pad_list
 import espnet.nets.pytorch_backend.lm.default as lm_pytorch
 from espnet.nets.pytorch_backend.streaming.segment import SegmentStreamingE2E
@@ -408,16 +406,19 @@ def train(args):
         int(valid_json[utts[0]]["input"][i]["shape"][-1]) for i in range(args.num_encs)
     ]
     odim = int(valid_json[utts[0]]["output"][0]["shape"][-1])
-    if hasattr(args, "decoder_mode") and args.decoder_mode == "maskctc":
-        odim += 1  # for the <mask> token
     for i in range(args.num_encs):
         logging.info("stream{}: input dims : {}".format(i + 1, idim_list[i]))
     logging.info("#output dims: " + str(odim))
 
     # specify attention, CTC, hybrid mode
     if "transducer" in args.model_module:
-        assert args.mtlalpha == 1.0
-        mtl_mode = "transducer"
+        if (
+            getattr(args, "etype", False) == "transformer"
+            or getattr(args, "dtype", False) == "transformer"
+        ):
+            mtl_mode = "transformer_transducer"
+        else:
+            mtl_mode = "transducer"
         logging.info("Pure transducer mode")
     elif args.mtlalpha == 1.0:
         mtl_mode = "ctc"
@@ -437,6 +438,7 @@ def train(args):
             idim_list[0] if args.num_encs == 1 else idim_list, odim, args
         )
     assert isinstance(model, ASRInterface)
+    total_subsampling_factor = model.get_total_subsampling_factor()
 
     logging.info(
         " Total parameter of the model = "
@@ -497,6 +499,16 @@ def train(args):
     else:
         model_params = model.parameters()
 
+    logging.warning(
+        "num. model params: {:,} (num. trained: {:,} ({:.1f}%))".format(
+            sum(p.numel() for p in model.parameters()),
+            sum(p.numel() for p in model.parameters() if p.requires_grad),
+            sum(p.numel() for p in model.parameters() if p.requires_grad)
+            * 100.0
+            / sum(p.numel() for p in model.parameters()),
+        )
+    )
+
     # Setup an optimizer
     if args.opt == "adadelta":
         optimizer = torch.optim.Adadelta(
@@ -507,8 +519,15 @@ def train(args):
     elif args.opt == "noam":
         from espnet.nets.pytorch_backend.transformer.optimizer import get_std_opt
 
+        # For transformer-transducer, adim declaration is within the block definition.
+        # Thus, we need retrieve the most dominant value (d_hidden) for Noam scheduler.
+        if hasattr(args, "enc_block_arch") or hasattr(args, "dec_block_arch"):
+            adim = model.most_dom_dim
+        else:
+            adim = args.adim
+
         optimizer = get_std_opt(
-            model_params, args.adim, args.transformer_warmup_steps, args.transformer_lr
+            model_params, adim, args.transformer_warmup_steps, args.transformer_lr
         )
     else:
         raise NotImplementedError("unknown optimizer: " + args.opt)
@@ -660,12 +679,13 @@ def train(args):
             CustomEvaluator(model, {"main": valid_iter}, reporter, device, args.ngpu)
         )
 
-    # Save attention weight at each epoch
+    # Save attention weight each epoch
     is_attn_plot = (
-        mtl_mode in ["att", "mtl"]
-        or "transformer" in args.model_module
+        "transformer" in args.model_module
         or "conformer" in args.model_module
-    )
+        or mtl_mode in ["att", "mtl"]
+    ) or mtl_mode == "transformer_transducer"
+
     if args.num_save_attention > 0 and is_attn_plot:
         data = sorted(
             list(valid_json.items())[: args.num_save_attention],
@@ -685,6 +705,7 @@ def train(args):
             converter=converter,
             transform=load_cv,
             device=device,
+            subsampling_factor=total_subsampling_factor,
         )
         trainer.extend(att_reporter, trigger=(1, "epoch"))
     else:
@@ -711,8 +732,7 @@ def train(args):
             converter=converter,
             transform=load_cv,
             device=device,
-            ikey="output",
-            iaxis=1,
+            subsampling_factor=total_subsampling_factor,
         )
         trainer.extend(ctc_reporter, trigger=(1, "epoch"))
     else:
@@ -760,7 +780,7 @@ def train(args):
         snapshot_object(model, "model.loss.best"),
         trigger=training.triggers.MinValueTrigger("validation/main/loss"),
     )
-    if mtl_mode not in ["ctc", "transducer"]:
+    if mtl_mode not in ["ctc", "transducer", "transformer_transducer"]:
         trainer.extend(
             snapshot_object(model, "model.acc.best"),
             trigger=training.triggers.MaxValueTrigger("validation/main/acc"),
@@ -772,8 +792,9 @@ def train(args):
             torch_snapshot(filename="snapshot.iter.{.updater.iteration}"),
             trigger=(args.save_interval_iters, "iteration"),
         )
-    else:
-        trainer.extend(torch_snapshot(), trigger=(1, "epoch"))
+
+    # save snapshot at every epoch - for model averaging
+    trainer.extend(torch_snapshot(), trigger=(1, "epoch"))
 
     # epsilon decay in the optimizer
     if args.opt == "adadelta":
@@ -888,7 +909,7 @@ def recog(args):
 
     """
     set_deterministic_pytorch(args)
-    model, train_args = load_trained_model(args.model)
+    model, train_args = load_trained_model(args.model, training=False)
     assert isinstance(model, ASRInterface)
     model.recog_args = args
 
@@ -970,6 +991,29 @@ def recog(args):
         preprocess_args={"train": False},
     )
 
+    # load transducer beam search
+    if hasattr(model, "is_rnnt"):
+        if hasattr(model, "dec"):
+            trans_decoder = model.dec
+        else:
+            trans_decoder = model.decoder
+        joint_network = model.joint_network
+
+        beam_search_transducer = BeamSearchTransducer(
+            decoder=trans_decoder,
+            joint_network=joint_network,
+            beam_size=args.beam_size,
+            nbest=args.nbest,
+            lm=rnnlm,
+            lm_weight=args.lm_weight,
+            search_type=args.search_type,
+            max_sym_exp=args.max_sym_exp,
+            u_max=args.u_max,
+            nstep=args.nstep,
+            prefix_alpha=args.prefix_alpha,
+            score_norm=args.score_norm,
+        )
+
     if args.batchsize == 0:
         with torch.no_grad():
             for idx, name in enumerate(js.keys(), 1):
@@ -1025,10 +1069,8 @@ def recog(args):
                             for n in range(args.nbest):
                                 nbest_hyps[n]["yseq"].extend(hyps[n]["yseq"])
                                 nbest_hyps[n]["score"] += hyps[n]["score"]
-                elif hasattr(model, "decoder_mode") and model.decoder_mode == "maskctc":
-                    nbest_hyps = model.recognize_maskctc(
-                        feat, args, train_args.char_list
-                    )
+                elif hasattr(model, "is_rnnt"):
+                    nbest_hyps = model.recognize(feat, beam_search_transducer)
                 else:
                     nbest_hyps = model.recognize(
                         feat, args, train_args.char_list, rnnlm
