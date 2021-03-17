@@ -509,61 +509,6 @@ def train(args):
         )
     )
 
-    # Setup an optimizer
-    if args.opt == "adadelta":
-        optimizer = torch.optim.Adadelta(
-            model_params, rho=0.95, eps=args.eps, weight_decay=args.weight_decay
-        )
-    elif args.opt == "adam":
-        optimizer = torch.optim.Adam(model_params, weight_decay=args.weight_decay)
-    elif args.opt == "noam":
-        from espnet.nets.pytorch_backend.transformer.optimizer import get_std_opt
-
-        # For transformer-transducer, adim declaration is within the block definition.
-        # Thus, we need retrieve the most dominant value (d_hidden) for Noam scheduler.
-        if hasattr(args, "enc_block_arch") or hasattr(args, "dec_block_arch"):
-            adim = model.most_dom_dim
-        else:
-            adim = args.adim
-
-        optimizer = get_std_opt(
-            model_params, adim, args.transformer_warmup_steps, args.transformer_lr
-        )
-    else:
-        raise NotImplementedError("unknown optimizer: " + args.opt)
-
-    # setup apex.amp
-    if args.train_dtype in ("O0", "O1", "O2", "O3"):
-        try:
-            from apex import amp
-        except ImportError as e:
-            logging.error(
-                f"You need to install apex for --train-dtype {args.train_dtype}. "
-                "See https://github.com/NVIDIA/apex#linux"
-            )
-            raise e
-        if args.opt == "noam":
-            model, optimizer.optimizer = amp.initialize(
-                model, optimizer.optimizer, opt_level=args.train_dtype
-            )
-        else:
-            model, optimizer = amp.initialize(
-                model, optimizer, opt_level=args.train_dtype
-            )
-        use_apex = True
-
-        from espnet.nets.pytorch_backend.ctc import CTC
-
-        amp.register_float_function(CTC, "loss_fn")
-        amp.init()
-        logging.warning("register ctc as float function")
-    else:
-        use_apex = False
-
-    # FIXME: TOO DIRTY HACK
-    setattr(optimizer, "target", reporter)
-    setattr(optimizer, "serialize", lambda s: reporter.serialize(s))
-
     # Setup a converter
     if args.num_encs == 1:
         converter = CustomConverter(subsampling_factor=model.subsample[0], dtype=dtype)
@@ -642,6 +587,68 @@ def train(args):
         collate_fn=lambda x: x[0],
         num_workers=args.n_iter_processes,
     )
+
+    # Setup an optimizer
+    if args.opt == "adadelta":
+        optimizer = torch.optim.Adadelta(
+            model_params, rho=0.95, eps=args.eps, weight_decay=args.weight_decay
+        )
+    elif args.opt == "adam":
+        optimizer = torch.optim.Adam(model_params, weight_decay=args.weight_decay)
+    elif args.opt == "noam":
+        from espnet.nets.pytorch_backend.transformer.optimizer import get_std_opt
+
+        # For transformer-transducer, adim declaration is within the block definition.
+        # Thus, we need retrieve the most dominant value (d_hidden) for Noam scheduler.
+        if hasattr(args, "enc_block_arch") or hasattr(args, "dec_block_arch"):
+            adim = model.most_dom_dim
+        else:
+            adim = args.adim
+
+        optimizer = get_std_opt(
+            model_params, adim, args.transformer_warmup_steps, args.transformer_lr
+        )
+    elif args.opt == "onecycle":
+        from espnet.nets.pytorch_backend.transformer.optimizer import get_onecycle_opt
+
+        steps_per_epoch = math.ceil(train_iter.len / args.accum_grad)
+        optimizer = get_onecycle_opt(
+            model_params, args.max_lr, steps_per_epoch, args.epochs
+        )
+    else:
+        raise NotImplementedError("unknown optimizer: " + args.opt)
+
+    # setup apex.amp
+    if args.train_dtype in ("O0", "O1", "O2", "O3"):
+        try:
+            from apex import amp
+        except ImportError as e:
+            logging.error(
+                f"You need to install apex for --train-dtype {args.train_dtype}. "
+                "See https://github.com/NVIDIA/apex#linux"
+            )
+            raise e
+        if args.opt == "noam":
+            model, optimizer.optimizer = amp.initialize(
+                model, optimizer.optimizer, opt_level=args.train_dtype
+            )
+        else:
+            model, optimizer = amp.initialize(
+                model, optimizer, opt_level=args.train_dtype
+            )
+        use_apex = True
+
+        from espnet.nets.pytorch_backend.ctc import CTC
+
+        amp.register_float_function(CTC, "loss_fn")
+        amp.init()
+        logging.warning("register ctc as float function")
+    else:
+        use_apex = False
+
+    # FIXME: TOO DIRTY HACK
+    setattr(optimizer, "target", reporter)
+    setattr(optimizer, "serialize", lambda s: reporter.serialize(s))
 
     # Set up a trainer
     updater = CustomUpdater(
@@ -864,6 +871,16 @@ def train(args):
         "validation/main/cer_ctc",
         "elapsed_time",
     ] + ([] if args.num_encs == 1 else report_keys_cer_ctc + report_keys_loss_ctc)
+
+    # Only for my experiments to monitor the learning rate curves
+    trainer.extend(
+        extensions.observe_value(
+            "lr",
+            lambda trainer: trainer.updater.get_optimizer("main").param_groups[0]["lr"],
+        ),
+        trigger=(args.report_interval_iters, "iteration"),
+    )
+
     if args.opt == "adadelta":
         trainer.extend(
             extensions.observe_value(

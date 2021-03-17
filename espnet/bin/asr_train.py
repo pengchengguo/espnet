@@ -278,11 +278,35 @@ def get_parser(parser=None, required=True):
         "--opt",
         default="adadelta",
         type=str,
-        choices=["adadelta", "adam", "noam"],
+        choices=["adadelta", "adam", "noam", "onecycle"],
         help="Optimizer",
     )
     parser.add_argument(
         "--accum-grad", default=1, type=int, help="Number of gradient accumuration"
+    )
+    parser.add_argument(
+        "--max-lr",
+        default=1e-3,
+        type=float,
+        help="Maximum learning rate for OneCycleLR scheduler.",
+    )
+    parser.add_argument(
+        "--pct-start",
+        default=0.3,
+        type=float,
+        help="The percentage of the cycle (in number of steps) spent increasing the learning rate.",
+    )
+    parser.add_argument(
+        "--final-div-factor",
+        default=1e4,
+        type=float,
+        help="Determines the minium learning rate via initial_lr/final_div_factor.",
+    )
+    parser.add_argument(
+        "--last-epoch",
+        default=-1,
+        type=int,
+        help="The index of the last batch for resuming a training job.",
     )
     parser.add_argument(
         "--eps", default=1e-8, type=float, help="Epsilon constant for optimizer"

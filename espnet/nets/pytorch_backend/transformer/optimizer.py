@@ -73,3 +73,75 @@ def get_std_opt(model_params, d_model, warmup, factor):
     """Get standard NoamOpt."""
     base = torch.optim.Adam(model_params, lr=0, betas=(0.9, 0.98), eps=1e-9)
     return NoamOpt(d_model, factor, warmup, base)
+
+
+class OneCycleLR(object):
+    """Optim wrapper that implements OneCycleLR scheduler."""
+
+    def __init__(self, optimizer, scheduler):
+        """Construct an OneCycleLR scheduler wrapper."""
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+
+    @property
+    def param_groups(self):
+        """Return param_groups."""
+        return self.optimizer.param_groups
+
+    def step(self):
+        """Update paramters and learning rates."""
+        self.optimizer.step()
+        self.scheduler.step()
+
+    def zero_grad(self):
+        """Reset gradients."""
+        self.optimizer.zero_grad()
+
+    def state_dict(self):
+        """Return state_dict."""
+        return {
+            "optimizer": self.optimizer.state_dict(),
+        }
+
+    def load_state_dict(self, state_dict):
+        """Load state_dict."""
+        for key, value in state_dict.items():
+            if key == "optimizer":
+                self.optimizer.load_state_dict(state_dict["optimizer"])
+            else:
+                setattr(self, key, value)
+
+
+def get_onecycle_opt(
+    model_params,
+    max_lr,
+    steps_per_epoch,
+    epochs,
+    pct_start=0.3,
+    final_div_factor=1e4,
+    last_epoch=-1,
+):
+    """Get stadard OneCycleLR scheduler.
+
+    Args:
+        model_params ([type]): [description]
+        max_lr ([type]): [description]
+        steps_per_epoch ([type]): [description]
+        epochs (int):
+        pct_start (float, optional): [description]. Defaults to 0.3.
+        final_div_factor ([type], optional): [description]. Defaults to 1e4.
+        last_epoch (int, optional): [description]. Defaults to -1.
+    """
+    # optimizer = torch.optim.SGD(model_params, lr=0.1, momentum=0.9)
+    optimizer = torch.optim.Adam(model_params, lr=1e-3, betas=(0.9, 0.98), eps=1e-9)
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr,
+        steps_per_epoch=steps_per_epoch,
+        epochs=epochs,
+        pct_start=pct_start,
+        final_div_factor=final_div_factor,
+        last_epoch=last_epoch,
+    )
+
+    return OneCycleLR(optimizer, scheduler)
