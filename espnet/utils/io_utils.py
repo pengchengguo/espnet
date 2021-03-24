@@ -29,6 +29,7 @@ class LoadInputsAndTargets(object):
     :param: str preprocess_conf: The path of a json file for pre-processing
     :param: bool load_input: If False, not to load the input data
     :param: bool load_output: If False, not to load the output data
+    :param: bool load_alignment: If False, not to load the CTC alignments
     :param: bool sort_in_input_length: Sort the mini-batch in descending order
         of the input length
     :param: bool use_speaker_embedding: Used for tts mode only
@@ -43,6 +44,7 @@ class LoadInputsAndTargets(object):
         preprocess_conf=None,
         load_input=True,
         load_output=True,
+        load_alignment=False,
         sort_in_input_length=True,
         use_speaker_embedding=False,
         use_second_target=False,
@@ -79,6 +81,7 @@ class LoadInputsAndTargets(object):
         self.mode = mode
         self.load_output = load_output
         self.load_input = load_input
+        self.load_alignment = load_alignment
         self.sort_in_input_length = sort_in_input_length
         self.use_speaker_embedding = use_speaker_embedding
         self.use_second_target = use_second_target
@@ -106,6 +109,7 @@ class LoadInputsAndTargets(object):
         """
         x_feats_dict = OrderedDict()  # OrderedDict[str, List[np.ndarray]]
         y_feats_dict = OrderedDict()  # OrderedDict[str, List[np.ndarray]]
+        y_aligns_dict = OrderedDict()  # OrderedDict[str, List[np.ndarray]]
         uttid_list = []  # List[str]
 
         for uttid, info in batch:
@@ -159,9 +163,18 @@ class LoadInputsAndTargets(object):
 
                     y_feats_dict.setdefault(inp["name"], []).append(x)
 
+                    if self.load_alignment:
+                        assert "ctc_alignmentid" in inp
+                        # ======= Legacy format for output =======
+                        # {"output": [{"ctc_alignmentid": "1 2 3 4"}])
+                        x_align = np.fromiter(
+                            map(int, inp["ctc_alignmentid"].split()), dtype=np.int64
+                        )
+                        y_aligns_dict.setdefault(inp["name"], []).append(x_align)
+
         if self.mode == "asr":
             return_batch, uttid_list = self._create_batch_asr(
-                x_feats_dict, y_feats_dict, uttid_list
+                x_feats_dict, y_feats_dict, y_aligns_dict, uttid_list
             )
         elif self.mode == "tts":
             _, info = batch[0]
@@ -194,13 +207,16 @@ class LoadInputsAndTargets(object):
         # Doesn't return the names now.
         return tuple(return_batch.values())
 
-    def _create_batch_asr(self, x_feats_dict, y_feats_dict, uttid_list):
+    def _create_batch_asr(self, x_feats_dict, y_feats_dict, y_aligns_dict, uttid_list):
         """Create a OrderedDict for the mini-batch
 
         :param OrderedDict x_feats_dict:
             e.g. {"input1": [ndarray, ndarray, ...],
                   "input2": [ndarray, ndarray, ...]}
         :param OrderedDict y_feats_dict:
+            e.g. {"target1": [ndarray, ndarray, ...],
+                  "target2": [ndarray, ndarray, ...]}
+        :param OrderedDict y_aligns_dict:
             e.g. {"target1": [ndarray, ndarray, ...],
                   "target2": [ndarray, ndarray, ...]}
         :param: List[str] uttid_list:
@@ -212,13 +228,40 @@ class LoadInputsAndTargets(object):
         xs = list(x_feats_dict.values())
 
         if self.load_output:
-            ys = list(y_feats_dict.values())
-            assert len(xs[0]) == len(ys[0]), (len(xs[0]), len(ys[0]))
+            if len(y_feats_dict) == 1:
+                ys = list(y_feats_dict.values())[0]
+                assert len(xs[0]) == len(ys[0]), (len(xs[0]), len(ys[0]))
 
-            # get index of non-zero length samples
-            nonzero_idx = list(filter(lambda i: len(ys[0][i]) > 0, range(len(ys[0]))))
-            for n in range(1, len(y_feats_dict)):
-                nonzero_idx = filter(lambda i: len(ys[n][i]) > 0, nonzero_idx)
+                # get index of non-zero length samples
+                nonzero_idx = list(
+                    filter(lambda i: len(ys[0][i]) > 0, range(len(ys[0])))
+                )
+                for n in range(1, len(y_feats_dict)):
+                    nonzero_idx = filter(lambda i: len(ys[n][i]) > 0, nonzero_idx)
+            elif len(y_feats_dict) > 1:  # multi spkr ASR
+                ys = list(y_feats_dict.values())
+                assert len(xs[0]) == len(ys[0]), (len(xs[0]), len(ys[0]))
+
+                # get index of non-zero length samples
+                nonzero_idx = list(
+                    filter(lambda i: len(ys[0][i]) > 0, range(len(ys[0])))
+                )
+                for n in range(1, len(y_feats_dict)):
+                    nonzero_idx = filter(lambda i: len(ys[n][i]) > 0, nonzero_idx)
+                nonzero_idx = list(nonzero_idx)
+
+                if self.load_alignment:
+                    y_aligns = list(y_aligns_dict.values())
+                    assert len(ys) == len(y_aligns), (
+                        "num_speakers",
+                        len(ys),
+                        len(y_aligns),
+                    )
+                    assert len(xs[0]) == len(y_aligns[0]), (
+                        "num_samples",
+                        len(xs[0]),
+                        len(y_aligns[0]),
+                    )
         else:
             # Note(kamo): Be careful not to make nonzero_idx to a generator
             nonzero_idx = list(range(len(xs[0])))
@@ -242,7 +285,29 @@ class LoadInputsAndTargets(object):
 
         x_names = list(x_feats_dict.keys())
         if self.load_output:
-            ys = [[y[i] for i in nonzero_sorted_idx] for y in ys]
+            if len(y_feats_dict) == 1:
+                ys = [[y[i] for i in nonzero_sorted_idx] for y in ys]
+            elif len(y_feats_dict) > 1:  # multi-speaker asr mode
+                # ys = zip(*[[y[i] for i in nonzero_sorted_idx] for y in ys])
+                ys = [[y[i] for i in nonzero_sorted_idx] for y in ys]
+
+                if self.load_alignment:
+                    if len((y_aligns_dict)) > 0:  # y_aligns_dict exists
+                        y_aligns = [
+                            [y_align[i] for i in nonzero_sorted_idx]
+                            for y_align in y_aligns
+                        ]
+                    new_ys = []
+                    for i in range(len(ys)):  # num_speakers
+                        new_ys.append([])
+                        for j in range(len(ys[0])):  # num_samples
+                            new_ys[-1].append(
+                                OrderedDict(
+                                    [("seq", ys[i][j]), ("ctc_align", y_aligns[i][j])]
+                                )
+                            )
+                    ys = new_ys
+
             y_names = list(y_feats_dict.keys())
 
             # Keeping x_name and y_name, e.g. input1, for future extension

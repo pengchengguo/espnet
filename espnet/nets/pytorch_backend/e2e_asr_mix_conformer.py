@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # encoding: utf-8
 
-# Copyright 2020 Johns Hopkins University (Xuankai Chang)
+# Copyright 2020 Northwestern Polytechnical University (Pengcheng Guo)
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
 """
 Transformer speech recognition model for single-channel multi-speaker mixture speech.
 
-It is a fusion of `e2e_asr_mix.py` and `e2e_asr_transformer.py`. Refer to:
+It is a fusion of `e2e_asr_mix.py` and `e2e_asr_conformer.py`. Refer to:
     https://arxiv.org/pdf/2002.03921.pdf
-1. The Transformer-based Encoder now consists of three stages:
+1. The Conformer-based Encoder now consists of three stages:
      (a): Enc_mix: encoding input mixture speech;
      (b): Enc_SD: separating mixed speech representations;
      (c): Enc_rec: transforming each separated speech representation.
@@ -27,15 +27,15 @@ from espnet.nets.asr_interface import ASRInterface
 from espnet.nets.ctc_prefix_score import CTCPrefixScore
 from espnet.nets.e2e_asr_common import end_detect
 from espnet.nets.pytorch_backend.ctc import CTC
+from espnet.nets.pytorch_backend.conformer.encoder_mix import EncoderMix
 from espnet.nets.pytorch_backend.e2e_asr import CTC_LOSS_THRESHOLD
 from espnet.nets.pytorch_backend.e2e_asr_mix import E2E as E2EASRMIX
 from espnet.nets.pytorch_backend.e2e_asr_mix import PIT
-from espnet.nets.pytorch_backend.e2e_asr_transformer import E2E as E2EASR
+from espnet.nets.pytorch_backend.e2e_asr_conformer import E2E as E2EASR
 from espnet.nets.pytorch_backend.nets_utils import make_non_pad_mask
 from espnet.nets.pytorch_backend.nets_utils import th_accuracy
 from espnet.nets.pytorch_backend.rnn.decoders import CTC_SCORING_RATIO
 from espnet.nets.pytorch_backend.transformer.add_sos_eos import add_sos_eos
-from espnet.nets.pytorch_backend.transformer.encoder_mix import EncoderMix
 from espnet.nets.pytorch_backend.transformer.mask import subsequent_mask
 from espnet.nets.pytorch_backend.transformer.mask import target_mask
 
@@ -76,6 +76,13 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
             dropout_rate=args.dropout_rate,
             positional_dropout_rate=args.dropout_rate,
             attention_dropout_rate=args.transformer_attn_dropout_rate,
+            pos_enc_layer_type=args.transformer_encoder_pos_enc_layer_type,
+            selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+            activation_type=args.transformer_encoder_activation_type,
+            macaron_style=args.macaron_style,
+            use_cnn_module=args.use_cnn_module,
+            zero_triu=args.zero_triu,
+            cnn_module_kernel=args.cnn_module_kernel,
             num_spkrs=args.num_spkrs,
         )
 
@@ -85,6 +92,8 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
             )
         else:
             self.ctc = None
+
+        print(self)
 
         self.num_spkrs = args.num_spkrs
         self.pit = PIT(self.num_spkrs)
@@ -274,6 +283,7 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
             lpz = None
 
         h = enc_output.squeeze(0)
+
         logging.info("input lengths: " + str(h.size(0)))
         # search parms
         beam = recog_args.beam_size

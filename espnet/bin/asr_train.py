@@ -347,7 +347,7 @@ def get_parser(parser=None, required=True):
         "--num-spkrs",
         default=1,
         type=int,
-        choices=[1, 2],
+        choices=[1, 2, 3],
         help="Number of speakers in the speech.",
     )
     # decoder related
@@ -633,9 +633,15 @@ def main(cmd_args):
     else:
         # FIXME(kamo): Support --model-module
         if args.backend == "pytorch":
-            from espnet.asr.pytorch_backend.asr_mix import train
+            if "conditional" in model_module:
+                logging.warning("Using conditional chain based method.")
+                from espnet.asr.pytorch_backend.asr_mix_conditional import train
 
-            train(args)
+                train(args)
+            else:
+                from espnet.asr.pytorch_backend.asr_mix import train
+
+                train(args)
         else:
             raise ValueError("Only pytorch is supported.")
 

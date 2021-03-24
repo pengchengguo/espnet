@@ -112,6 +112,12 @@ class Encoder(torch.nn.Module):
                 torch.nn.Dropout(dropout_rate),
                 pos_enc_class(attention_dim, positional_dropout_rate),
             )
+        elif input_layer == "pure_linear":
+            self.embed = torch.nn.Sequential(
+                torch.nn.Linear(idim, attention_dim),
+                torch.nn.LayerNorm(attention_dim),
+                torch.nn.Dropout(dropout_rate),
+            )
         elif input_layer == "conv2d":
             self.embed = Conv2dSubsampling(
                 idim,
@@ -142,6 +148,58 @@ class Encoder(torch.nn.Module):
         self.normalize_before = normalize_before
 
         # self-attention module definition
+        (
+            encoder_selfattn_layer,
+            encoder_selfattn_layer_args,
+        ) = self.get_selfattention_layer(
+            pos_enc_layer_type,
+            selfattention_layer_type,
+            attention_heads,
+            attention_dim,
+            attention_dropout_rate,
+            zero_triu,
+        )
+
+        # feed-forward module definition
+        positionwise_layer, positionwise_layer_args = self.get_positionwise_layer(
+            positionwise_layer_type,
+            attention_dim,
+            linear_units,
+            dropout_rate,
+            activation,
+            positionwise_conv_kernel_size,
+        )
+
+        # convolution module definition
+        convolution_layer = ConvolutionModule
+        convolution_layer_args = (attention_dim, cnn_module_kernel, activation)
+
+        self.encoders = repeat(
+            num_blocks,
+            lambda lnum: EncoderLayer(
+                attention_dim,
+                encoder_selfattn_layer(*encoder_selfattn_layer_args),
+                positionwise_layer(*positionwise_layer_args),
+                positionwise_layer(*positionwise_layer_args) if macaron_style else None,
+                convolution_layer(*convolution_layer_args) if use_cnn_module else None,
+                dropout_rate,
+                normalize_before,
+                concat_after,
+            ),
+        )
+        if self.normalize_before:
+            self.after_norm = LayerNorm(attention_dim)
+
+    def get_selfattention_layer(
+        self,
+        pos_enc_layer_type,
+        selfattention_layer_type,
+        attention_heads,
+        attention_dim,
+        attention_dropout_rate,
+        zero_triu,
+    ):
+        """Define encoder selfattn layer."""
         if selfattention_layer_type == "selfattn":
             logging.info("encoder self-attention layer type = self-attention")
             encoder_selfattn_layer = MultiHeadedAttention
@@ -151,6 +209,7 @@ class Encoder(torch.nn.Module):
                 attention_dropout_rate,
             )
         elif selfattention_layer_type == "legacy_rel_selfattn":
+            logging.info("encoder self-attention layer type = legacy relative self-attention")
             assert pos_enc_layer_type == "legacy_rel_pos"
             encoder_selfattn_layer = LegacyRelPositionMultiHeadedAttention
             encoder_selfattn_layer_args = (
@@ -171,7 +230,18 @@ class Encoder(torch.nn.Module):
         else:
             raise ValueError("unknown encoder_attn_layer: " + selfattention_layer_type)
 
-        # feed-forward module definition
+        return encoder_selfattn_layer, encoder_selfattn_layer_args
+
+    def get_positionwise_layer(
+        self,
+        positionwise_layer_type="linear",
+        attention_dim=256,
+        linear_units=2048,
+        dropout_rate=0.1,
+        activation="swish",
+        positionwise_conv_kernel_size=1,
+    ):
+        """Define positionwise layer."""
         if positionwise_layer_type == "linear":
             positionwise_layer = PositionwiseFeedForward
             positionwise_layer_args = (
@@ -198,26 +268,7 @@ class Encoder(torch.nn.Module):
             )
         else:
             raise NotImplementedError("Support only linear or conv1d.")
-
-        # convolution module definition
-        convolution_layer = ConvolutionModule
-        convolution_layer_args = (attention_dim, cnn_module_kernel, activation)
-
-        self.encoders = repeat(
-            num_blocks,
-            lambda lnum: EncoderLayer(
-                attention_dim,
-                encoder_selfattn_layer(*encoder_selfattn_layer_args),
-                positionwise_layer(*positionwise_layer_args),
-                positionwise_layer(*positionwise_layer_args) if macaron_style else None,
-                convolution_layer(*convolution_layer_args) if use_cnn_module else None,
-                dropout_rate,
-                normalize_before,
-                concat_after,
-            ),
-        )
-        if self.normalize_before:
-            self.after_norm = LayerNorm(attention_dim)
+        return positionwise_layer, positionwise_layer_args
 
     def forward(self, xs, masks):
         """Encode input sequence.
