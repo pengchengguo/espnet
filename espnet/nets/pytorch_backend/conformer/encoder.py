@@ -209,7 +209,9 @@ class Encoder(torch.nn.Module):
                 attention_dropout_rate,
             )
         elif selfattention_layer_type == "legacy_rel_selfattn":
-            logging.info("encoder self-attention layer type = legacy relative self-attention")
+            logging.info(
+                "encoder self-attention layer type = legacy relative self-attention"
+            )
             assert pos_enc_layer_type == "legacy_rel_pos"
             encoder_selfattn_layer = LegacyRelPositionMultiHeadedAttention
             encoder_selfattn_layer_args = (
@@ -287,10 +289,18 @@ class Encoder(torch.nn.Module):
         else:
             xs = self.embed(xs)
 
-        xs, masks = self.encoders(xs, masks)
+        # xs, masks = self.encoders(xs, masks)
+        num_layer = len(self.encoders)
+        for idx, encoder in enumerate(self.encoders):
+            xs, masks = encoder(xs, masks)
+            if idx == num_layer // 2 - 1:
+                hidden_feature = xs
+
         if isinstance(xs, tuple):
             xs = xs[0]
+            hidden_feature = hidden_feature[0]
 
         if self.normalize_before:
             xs = self.after_norm(xs)
+            self.hidden_feature = self.after_norm(hidden_feature)
         return xs, masks

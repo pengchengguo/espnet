@@ -101,6 +101,18 @@ class E2E(E2EConformer):
             "representations as conditions.",
         )
         group.add_argument(
+            "--use-inter-ctc",
+            default=False,
+            type=strtobool,
+            help="Whether to use intermediate CTC regularization loss.",
+        )
+        group.add_argument(
+            "--inter-ctc-weight",
+            default=0.3,
+            type=float,
+            help="Weight of the intermediate CTC regularization loss.",
+        )
+        group.add_argument(
             "--use-stop-sign-ctc",
             default=False,
             type=strtobool,
@@ -166,6 +178,10 @@ class E2E(E2EConformer):
         )
 
         self.use_ctc_alignment = args.use_ctc_alignment
+        self.use_inter_ctc = args.use_inter_ctc
+        if self.use_inter_ctc:
+            self.inter_ctc_weight = args.inter_ctc_weight
+            self.project_linear = torch.nn.Linear(args.eunits_cond, args.adim)
         self.use_stop_sign_ctc = args.use_stop_sign_ctc
         self.use_stop_sign_bce = args.use_stop_sign_bce
         if self.use_stop_sign_bce:
@@ -238,7 +254,8 @@ class E2E(E2EConformer):
         num_spkrs = ys_pad.size(1)
         hs_len = hs_mask.view(batch_size, -1).sum(1)
         prev_states = None
-        hs_pad_sd, loss_ctc, loss_stop = (
+        hs_pad_sd, loss_ctc, loss_inter_ctc, loss_stop = (
+            [None] * num_spkrs,
             [None] * num_spkrs,
             [None] * num_spkrs,
             [None] * num_spkrs,
@@ -252,10 +269,10 @@ class E2E(E2EConformer):
             align_ctc_state = hs_pad.new_zeros(hs_pad.size())
 
         for i in range(num_spkrs):
-            hs_pad_sd[i], prev_states = self.encoder_condition(
+            condition_out, prev_states = self.encoder_condition(
                 hs_pad, align_ctc_state, hs_len, prev_states
             )
-            hs_pad_sd[i], hs_mask = self.encoder_recognition(hs_pad_sd[i], hs_mask)
+            hs_pad_sd[i], hs_mask = self.encoder_recognition(condition_out, hs_mask)
             loss_ctc[i], min_idx = self.min_ctc_loss_and_perm(
                 hs_pad_sd[i], hs_len, ys_pad[:, i:]
             )
@@ -267,6 +284,10 @@ class E2E(E2EConformer):
                     ys_ctc_align_pad = self.resort_sequence(
                         ys_ctc_align_pad, min_idx, i
                     )
+
+            if self.use_inter_ctc:
+                project_out = self.project_linear(condition_out)
+                loss_inter_ctc[i] = self.ctc(project_out, hs_len, ys_pad[:, i])
 
             if self.use_ctc_alignment:
                 if random.random() < self.sampling_probability:
@@ -299,6 +320,10 @@ class E2E(E2EConformer):
 
         loss_ctc = torch.stack(loss_ctc, dim=0).mean()  # (num_spkrs, B)
         logging.info("ctc loss:" + str(float(loss_ctc)))
+
+        if self.use_inter_ctc:
+            loss_inter_ctc = torch.stack(loss_inter_ctc, dim=0).mean()  # (num_spkrs, B)
+            logging.info("inter ctc loss:" + str(float(loss_inter_ctc)))
 
         ys_pad = ys_pad.transpose(0, 1)  # (num_spkrs, B, Lmax)
         ys_out_len = [
@@ -358,22 +383,41 @@ class E2E(E2EConformer):
             self.loss = loss_att
             loss_att_data = float(loss_att)
             loss_ctc_data = None
+            loss_inter_ctc_data = None
         elif alpha == 1:
-            self.loss = loss_ctc
             loss_att_data = None
             loss_ctc_data = float(loss_ctc)
+            if self.use_inter_ctc:
+                self.loss = (
+                    self.inter_ctc_weight * loss_inter_ctc
+                    + (1 - self.inter_ctc_weight) * loss_ctc
+                )
+                loss_inter_ctc_data = float(loss_inter_ctc)
+            else:
+                self.loss = loss_ctc
+                loss_inter_ctc_data = None
         else:
             self.loss = alpha * loss_ctc + (1 - alpha) * loss_att
             loss_att_data = float(loss_att)
             loss_ctc_data = float(loss_ctc)
+            loss_inter_ctc_data = None
 
         if self.use_stop_sign_bce:
             self.loss += loss_stop
 
         loss_data = float(self.loss)
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
+            # TODO: support reporting for the loss_inter_ctc_data
+            # For now, we only replace the attention loss with the loss_inter_ctc_loss
+            # since the we only run CTC model.
             self.reporter.report(
-                loss_ctc_data, loss_att_data, self.acc, cer_ctc, cer, wer, loss_data
+                loss_ctc_data,
+                loss_inter_ctc_data,
+                self.acc,
+                cer_ctc,
+                cer,
+                wer,
+                loss_data,
             )
         else:
             logging.warning("loss (=%f) is not correct", loss_data)
@@ -941,11 +985,13 @@ class E2E(E2EConformer):
             "normalized log probability: "
             + str(nbest_hyps[0]["score"] / len(nbest_hyps[0]["yseq"]))
         )
-        return (
-            nbest_hyps,
-            self.predict_alignment(lpz, nbest_hyps[0]["yseq"], char_list),
-            prev_states,
-        )
+
+        if self.use_ctc_alignment:
+            alignment = self.predict_alignment(lpz, nbest_hyps[0]["yseq"], char_list)
+        else:
+            alignment = hs_pad.detach().data
+
+        return nbest_hyps, alignment, prev_states
 
     def recognize(
         self, x, recog_args, char_list=None, rnnlm=None, use_jit=False, num_spkrs=2
@@ -966,11 +1012,18 @@ class E2E(E2EConformer):
         else:
             alignment = enc_output.new_zeros(enc_output.size())
 
+        if recog_args.beam_size > 1:
+            logging.warning("Using beam search and LM rescoring.")
+            recog_func = self.recognize_for_one_spkr_v2
+        else:
+            logging.warning("Using greedy search.")
+            recog_func = self.recognize_for_one_spkr
+
         enc_len = torch.tensor([enc_output.size(1)], device=enc_output.device).long()
         nbest_hyps = []
         prev_states = None
         for ns in range(num_spkrs):
-            nbest_hyps_single, alignment, prev_states = self.recognize_for_one_spkr(
+            nbest_hyps_single, alignment, prev_states = recog_func(
                 enc_output,
                 enc_len,
                 alignment,

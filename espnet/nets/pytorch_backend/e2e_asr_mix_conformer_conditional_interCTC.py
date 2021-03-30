@@ -1,7 +1,14 @@
-# Copyright 2019 Shigeki Karita
+# Copyright 2020 Johns Hopkins University (Shinji Watanabe)
+#                Northwestern Polytechnical University (Pengcheng Guo)
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
-"""Transformer speech recognition model (pytorch)."""
+"""
+Conformer speech recognition model (pytorch).
+
+It is a fusion of `e2e_asr_transformer.py`
+Refer to: https://arxiv.org/abs/2005.08100
+
+"""
 
 from argparse import Namespace
 from distutils.util import strtobool
@@ -12,25 +19,27 @@ import random
 import numpy
 import torch
 
-from espnet.nets.asr_interface import ASRInterface
 from espnet.nets.ctc_prefix_score import CTCPrefixScore
 from espnet.nets.e2e_asr_common import end_detect
 from espnet.nets.pytorch_backend.ctc import CTC
+from espnet.nets.pytorch_backend.conformer.argument import (
+    verify_rel_pos_type,  # noqa: H301
+)
+from espnet.nets.pytorch_backend.conformer.encoder import Encoder
 from espnet.nets.pytorch_backend.e2e_asr import CTC_LOSS_THRESHOLD
+from espnet.nets.pytorch_backend.e2e_asr_conformer import E2E as E2EConformer
 from espnet.nets.pytorch_backend.e2e_asr_mix import E2E as E2EASRMIX
-from espnet.nets.pytorch_backend.e2e_asr_transformer import E2E as E2EASR
+from espnet.nets.pytorch_backend.e2e_asr_mix_transformer_conditional import StopBCELoss
 from espnet.nets.pytorch_backend.nets_utils import make_non_pad_mask
 from espnet.nets.pytorch_backend.nets_utils import th_accuracy
 from espnet.nets.pytorch_backend.rnn.decoders import CTC_SCORING_RATIO
 from espnet.nets.pytorch_backend.transformer.add_sos_eos import add_sos_eos
 from espnet.nets.pytorch_backend.transformer.conditional import ConditionalModule
-from espnet.nets.pytorch_backend.transformer.encoder import Encoder
 from espnet.nets.pytorch_backend.transformer.mask import subsequent_mask
 from espnet.nets.pytorch_backend.transformer.mask import target_mask
-from espnet.utils.fill_missing_args import fill_missing_args
 
 
-class E2E(E2EASR, ASRInterface, torch.nn.Module):
+class E2E(E2EConformer):
     """E2E module.
 
     :param int idim: dimension of inputs
@@ -42,11 +51,10 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
     @staticmethod
     def add_arguments(parser):
         """Add arguments."""
-        E2EASR.add_arguments(parser)
+        E2EConformer.add_arguments(parser)
         E2EASRMIX.encoder_mix_add_arguments(parser)
         E2E.encoder_argument(parser)
         E2E.loss_argument(parser)
-
         return parser
 
     @staticmethod
@@ -93,6 +101,18 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
             "representations as conditions.",
         )
         group.add_argument(
+            "--use-inter-ctc",
+            default=False,
+            type=strtobool,
+            help="Whether to use intermediate CTC regularization loss.",
+        )
+        group.add_argument(
+            "--inter-ctc-weight",
+            default=0.3,
+            type=float,
+            help="Weight of the intermediate CTC regularization loss.",
+        )
+        group.add_argument(
             "--use-stop-sign-ctc",
             default=False,
             type=strtobool,
@@ -113,28 +133,13 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
         :param int odim: dimension of outputs
         :param Namespace args: argument Namespace containing options
         """
-        super(E2E, self).__init__(idim, odim, args, ignore_id)
-
-        # fill missing arguments for compatibility
-        args = fill_missing_args(args, self.add_arguments)
-
+        super().__init__(idim, odim, args, ignore_id)
         if args.transformer_attn_dropout_rate is None:
             args.transformer_attn_dropout_rate = args.dropout_rate
-        self.encoder = Encoder(
-            idim=idim,
-            selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
-            attention_dim=args.adim,
-            attention_heads=args.aheads,
-            conv_wshare=args.wshare,
-            conv_kernel_length=args.ldconv_encoder_kernel_length,
-            conv_usebias=args.ldconv_usebias,
-            linear_units=args.eunits,
-            num_blocks=args.elayers,
-            input_layer=args.transformer_input_layer,
-            dropout_rate=args.dropout_rate,
-            positional_dropout_rate=args.dropout_rate,
-            attention_dropout_rate=args.transformer_attn_dropout_rate,
-        )
+
+        # Check the relative positional encoding type
+        args = verify_rel_pos_type(args)
+
         self.encoder_condition = ConditionalModule(
             eprojs=args.adim,
             odim=odim,
@@ -146,16 +151,24 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
             dropout_rate=args.dropout_rate,
             num_spkrs=args.num_spkrs,
         )
+
         self.encoder_recognition = Encoder(
             idim=args.eunits_cond,
             attention_dim=args.adim,
             attention_heads=args.aheads,
             linear_units=args.eunits,
             num_blocks=args.elayers_rec,
-            input_layer="pure_linear",
+            input_layer="linear",
             dropout_rate=args.dropout_rate,
             positional_dropout_rate=args.dropout_rate,
             attention_dropout_rate=args.transformer_attn_dropout_rate,
+            pos_enc_layer_type=args.transformer_encoder_pos_enc_layer_type,
+            selfattention_layer_type=args.transformer_encoder_selfattn_layer_type,
+            activation_type=args.transformer_encoder_activation_type,
+            macaron_style=args.macaron_style,
+            use_cnn_module=args.use_cnn_module,
+            zero_triu=args.zero_triu,
+            cnn_module_kernel=args.cnn_module_kernel,
         )
 
         self.reset_parameters(args)
@@ -165,6 +178,10 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
         )
 
         self.use_ctc_alignment = args.use_ctc_alignment
+        self.use_inter_ctc = args.use_inter_ctc
+        if self.use_inter_ctc:
+            self.inter_ctc_weight = args.inter_ctc_weight
+            self.project_linear = torch.nn.Linear(args.eunits_cond, args.adim)
         self.use_stop_sign_ctc = args.use_stop_sign_ctc
         self.use_stop_sign_bce = args.use_stop_sign_bce
         if self.use_stop_sign_bce:
@@ -237,7 +254,8 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
         num_spkrs = ys_pad.size(1)
         hs_len = hs_mask.view(batch_size, -1).sum(1)
         prev_states = None
-        hs_pad_sd, loss_ctc, loss_stop = (
+        hs_pad_sd, loss_ctc, loss_inter_ctc, loss_stop = (
+            [None] * num_spkrs,
             [None] * num_spkrs,
             [None] * num_spkrs,
             [None] * num_spkrs,
@@ -251,10 +269,10 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
             align_ctc_state = hs_pad.new_zeros(hs_pad.size())
 
         for i in range(num_spkrs):
-            hs_pad_sd[i], prev_states = self.encoder_condition(
+            condition_out, prev_states = self.encoder_condition(
                 hs_pad, align_ctc_state, hs_len, prev_states
             )
-            hs_pad_sd[i], hs_mask = self.encoder_recognition(hs_pad_sd[i], hs_mask)
+            hs_pad_sd[i], hs_mask = self.encoder_recognition(condition_out, hs_mask)
             loss_ctc[i], min_idx = self.min_ctc_loss_and_perm(
                 hs_pad_sd[i], hs_len, ys_pad[:, i:]
             )
@@ -266,6 +284,10 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
                     ys_ctc_align_pad = self.resort_sequence(
                         ys_ctc_align_pad, min_idx, i
                     )
+
+            if self.use_inter_ctc:
+                hidden_feature = self.encoder_recognition.hidden_feature
+                loss_inter_ctc[i] = self.ctc(hidden_feature, hs_len, ys_pad[:, i])
 
             if self.use_ctc_alignment:
                 if random.random() < self.sampling_probability:
@@ -298,6 +320,10 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
 
         loss_ctc = torch.stack(loss_ctc, dim=0).mean()  # (num_spkrs, B)
         logging.info("ctc loss:" + str(float(loss_ctc)))
+
+        if self.use_inter_ctc:
+            loss_inter_ctc = torch.stack(loss_inter_ctc, dim=0).mean()  # (num_spkrs, B)
+            logging.info("inter ctc loss:" + str(float(loss_inter_ctc)))
 
         ys_pad = ys_pad.transpose(0, 1)  # (num_spkrs, B, Lmax)
         ys_out_len = [
@@ -357,22 +383,41 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
             self.loss = loss_att
             loss_att_data = float(loss_att)
             loss_ctc_data = None
+            loss_inter_ctc_data = None
         elif alpha == 1:
-            self.loss = loss_ctc
             loss_att_data = None
             loss_ctc_data = float(loss_ctc)
+            if self.use_inter_ctc:
+                self.loss = (
+                    self.inter_ctc_weight * loss_inter_ctc
+                    + (1 - self.inter_ctc_weight) * loss_ctc
+                )
+                loss_inter_ctc_data = float(loss_inter_ctc)
+            else:
+                self.loss = loss_ctc
+                loss_inter_ctc_data = None
         else:
             self.loss = alpha * loss_ctc + (1 - alpha) * loss_att
             loss_att_data = float(loss_att)
             loss_ctc_data = float(loss_ctc)
+            loss_inter_ctc_data = None
 
         if self.use_stop_sign_bce:
             self.loss += loss_stop
 
         loss_data = float(self.loss)
         if loss_data < CTC_LOSS_THRESHOLD and not math.isnan(loss_data):
+            # TODO: support reporting for the loss_inter_ctc_data
+            # For now, we only replace the attention loss with the loss_inter_ctc_loss
+            # since the we only run CTC model.
             self.reporter.report(
-                loss_ctc_data, loss_att_data, self.acc, cer_ctc, cer, wer, loss_data
+                loss_ctc_data,
+                loss_inter_ctc_data,
+                self.acc,
+                cer_ctc,
+                cer,
+                wer,
+                loss_data,
             )
         else:
             logging.warning("loss (=%f) is not correct", loss_data)
@@ -990,33 +1035,3 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
             )
             nbest_hyps.append(nbest_hyps_single)
         return nbest_hyps
-
-
-class StopBCELoss(torch.nn.Module):
-    def __init__(
-        self, idim, odim=1, nlayers=1, nunits=512, dropout=0, bidirectional=False
-    ):
-        super(StopBCELoss, self).__init__()
-        self.idim = idim
-        self.lstmlayers = torch.nn.LSTM(
-            idim, nunits, nlayers, batch_first=True, bidirectional=bidirectional
-        )
-        self.output = torch.nn.Linear(idim, odim)
-        self.dropout = torch.nn.Dropout(dropout)
-
-        self.loss = torch.nn.BCELoss()
-
-    def forward(self, xs_pad, xs_len, ys):
-        """
-        :param torch.Tensor xs_pad: input sequence (B, Tmax, dim)
-        :param list xs_len: the lengths of xs (B)
-        :param torch.Tensor ys: the labels (B, 1)
-        """
-        xs_pack = torch.nn.utils.rnn.pack_padded_sequence(
-            xs_pad, xs_len, batch_first=True
-        )
-        _, (h_n, _) = self.lstmlayers(xs_pack)  # (B, dim)
-
-        linear_out = self.dropout(self.output(h_n[-1]))  # (B, 1)
-        linear_out = torch.sigmoid(linear_out)
-        return self.loss(linear_out, ys)
