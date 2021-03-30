@@ -65,7 +65,7 @@ class CustomConverter(object):
         self.subsampling_factor = subsampling_factor
         self.ignore_id = -1
         self.dtype = dtype
-        self.num_spkrs = num_spkrs
+        # self.num_spkrs = num_spkrs
 
     def __call__(self, batch, device=torch.device("cpu")):
         """Transform a batch and send it to a device.
@@ -80,7 +80,8 @@ class CustomConverter(object):
         """
         # batch should be located in list
         assert len(batch) == 1
-        xs, ys = batch[0][0], batch[0][-self.num_spkrs :]
+        xs, ys = batch[0][0], batch[0][1 :]
+        num_spkrs = len(ys)
 
         # perform subsampling
         if self.subsampling_factor > 1:
@@ -119,8 +120,8 @@ class CustomConverter(object):
                 ys_seq.append([])
                 ys_ctc_align.append([])
                 for n in range(len(xs)):  # nsamples
-                    ys_seq[-1].append(ys[i][n]["seq"])
-                    ys_ctc_align[-1].append(ys[i][n]["ctc_align"])
+                    ys_seq[-1].append(ys[i][n]['seq'])
+                    ys_ctc_align[-1].append(ys[i][n]['ctc_align'])
             ys = ys_seq
 
         if not isinstance(ys[0], np.ndarray):
@@ -129,7 +130,7 @@ class CustomConverter(object):
                 ys_pad += [torch.from_numpy(y).long() for y in ys[i]]
             ys_pad = pad_list(ys_pad, self.ignore_id)
             ys_pad = (
-                ys_pad.view(self.num_spkrs, -1, ys_pad.size(1))
+                ys_pad.view(num_spkrs, -1, ys_pad.size(1))
                 .transpose(0, 1)
                 .to(device)
             )  # (B, num_spkrs, Tmax)
@@ -143,7 +144,7 @@ class CustomConverter(object):
                     ]
                 ys_ctc_align_pad = pad_list(ys_ctc_align_pad, self.ignore_id)
                 ys_ctc_align_pad = (
-                    ys_ctc_align_pad.view(self.num_spkrs, -1, ys_ctc_align_pad.size(1))
+                    ys_ctc_align_pad.view(num_spkrs, -1, ys_ctc_align_pad.size(1))
                     .transpose(0, 1)
                     .to(device)
                 )  # (B, num_spkrs, Tmax)
@@ -164,7 +165,7 @@ def train(args):
 
     """
     set_deterministic_pytorch(args)
-    
+
     # check cuda availability
     if not torch.cuda.is_available():
         logging.warning("cuda is not available")
