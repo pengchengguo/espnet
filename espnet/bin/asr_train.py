@@ -515,6 +515,13 @@ def get_parser(parser=None, required=True):
     )
     parser.add_argument("--fbank-fmin", type=float, default=0.0, help="")
     parser.add_argument("--fbank-fmax", type=float, default=None, help="")
+    # Conditional chain based multi-spkr
+    parser.add_argument(
+        "--load-alignment",
+        type=strtobool,
+        default=True,
+        help="Whether to load CTC alignments",
+    )
     return parser
 
 

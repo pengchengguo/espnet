@@ -26,7 +26,7 @@ while getopts ':n:' opt; do
 done
 
 # Number of free GPUs on a machine
-n_gpus=$(lspci | grep -i "nvidia" | grep -c -v "Audio\|USB\|Serial")
+n_gpus=$(lspci | grep -i "nvidia" | grep -c -v "Audio")
 
 # Return -1 if there are no GPUs on the machine
 # or if the requested number of GPUs exceed

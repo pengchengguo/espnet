@@ -65,7 +65,7 @@ class CustomConverter(object):
         self.subsampling_factor = subsampling_factor
         self.ignore_id = -1
         self.dtype = dtype
-        # self.num_spkrs = num_spkrs
+        self.num_spkrs = num_spkrs
 
     def __call__(self, batch, device=torch.device("cpu")):
         """Transform a batch and send it to a device.
@@ -80,8 +80,7 @@ class CustomConverter(object):
         """
         # batch should be located in list
         assert len(batch) == 1
-        xs, ys = batch[0][0], batch[0][1 :]
-        num_spkrs = len(ys)
+        xs, ys = batch[0][0], batch[0][-self.num_spkrs :]
 
         # perform subsampling
         if self.subsampling_factor > 1:
@@ -112,31 +111,30 @@ class CustomConverter(object):
         ilens = torch.from_numpy(ilens).to(device)
 
         # ctc_alignment unpack
-        if not (type(ys[0][0]) is list):
-            ys_seq = []
-            ys_ctc_align = []
-
+        ys_seq = []
+        ys_ctc_align = []
+        if not (type(ys[0][0]) is list) and not (type(ys[0][0]) is np.ndarray):
             for i in range(len(ys)):  # nspeakers
                 ys_seq.append([])
                 ys_ctc_align.append([])
                 for n in range(len(xs)):  # nsamples
-                    ys_seq[-1].append(ys[i][n]['seq'])
-                    ys_ctc_align[-1].append(ys[i][n]['ctc_align'])
+                    ys_seq[-1].append(ys[i][n]["seq"])
+                    ys_ctc_align[-1].append(ys[i][n]["ctc_align"])
             ys = ys_seq
 
+        ys_ctc_align_pad = None
         if not isinstance(ys[0], np.ndarray):
             ys_pad = []
             for i in range(len(ys)):  # nspeakers
                 ys_pad += [torch.from_numpy(y).long() for y in ys[i]]
             ys_pad = pad_list(ys_pad, self.ignore_id)
             ys_pad = (
-                ys_pad.view(num_spkrs, -1, ys_pad.size(1))
+                ys_pad.view(self.num_spkrs, -1, ys_pad.size(1))
                 .transpose(0, 1)
                 .to(device)
             )  # (B, num_spkrs, Tmax)
 
-            ys_ctc_align_pad = None
-            if not (type(ys[0][0]) is list):  # CTC alignments
+            if ys_ctc_align != []:  # CTC alignments
                 ys_ctc_align_pad = []
                 for i in range(len(ys)):  # nspeakers
                     ys_ctc_align_pad += [
@@ -144,7 +142,7 @@ class CustomConverter(object):
                     ]
                 ys_ctc_align_pad = pad_list(ys_ctc_align_pad, self.ignore_id)
                 ys_ctc_align_pad = (
-                    ys_ctc_align_pad.view(num_spkrs, -1, ys_ctc_align_pad.size(1))
+                    ys_ctc_align_pad.view(self.num_spkrs, -1, ys_ctc_align_pad.size(1))
                     .transpose(0, 1)
                     .to(device)
                 )  # (B, num_spkrs, Tmax)
@@ -152,7 +150,6 @@ class CustomConverter(object):
             ys_pad = pad_list(
                 [torch.from_numpy(y).long() for y in ys], self.ignore_id
             ).to(device)
-            ys_ctc_align_pad = None
 
         return xs_pad, ilens, ys_pad, ys_ctc_align_pad
 
@@ -345,14 +342,14 @@ def train(args):
     load_tr = LoadInputsAndTargets(
         mode="asr",
         load_output=True,
-        load_alignment=True,
+        load_alignment=args.use_ctc_alignment,
         preprocess_conf=args.preprocess_conf,
         preprocess_args={"train": True},  # Switch the mode of preprocessing
     )
     load_cv = LoadInputsAndTargets(
         mode="asr",
         load_output=True,
-        load_alignment=True,
+        load_alignment=args.use_ctc_alignment,
         preprocess_conf=args.preprocess_conf,
         preprocess_args={"train": False},  # Switch the mode of preprocessing
     )

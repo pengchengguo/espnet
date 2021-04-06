@@ -239,6 +239,8 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
         """
         self.eval()
         x = torch.as_tensor(x).unsqueeze(0)
+        # when compute RTF, using this line
+        # x = torch.as_tensor(x).unsqueeze(0).cuda()
         enc_output, _ = self.encoder(x, None)
         return enc_output
 
