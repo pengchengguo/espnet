@@ -35,7 +35,7 @@ dropout-rate: 0.1
 
 # transformer specific setting
 backend: pytorch
-model-module: "espnet.nets.pytorch_backend.e2e_asr_mix_conformer_conditional:E2E"
+model-module: "espnet.nets.pytorch_backend.e2e_asr_mix_conformer_conditional_interCTC:E2E"
 transformer-input-layer: conv2d     # encoder architecture type
 transformer-lr: 1.0
 transformer-warmup-steps: 25000
@@ -50,7 +50,7 @@ transformer-encoder-activation-type: swish
 rel-pos-type: latest
 macaron-style: true
 use-cnn-module: true
-cnn-module-kernel: 15
+cnn-module-kernel: 5
 
 # Report CER & WER
 report-cer: true

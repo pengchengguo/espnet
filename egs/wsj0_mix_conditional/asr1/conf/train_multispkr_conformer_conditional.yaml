@@ -50,7 +50,7 @@ transformer-encoder-activation-type: swish
 rel-pos-type: latest
 macaron-style: true
 use-cnn-module: true
-cnn-module-kernel: 15
+cnn-module-kernel: 5
 
 # Report CER & WER
 report-cer: true

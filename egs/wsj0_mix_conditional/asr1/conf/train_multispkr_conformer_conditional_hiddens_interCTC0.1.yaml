@@ -50,14 +50,14 @@ transformer-encoder-activation-type: swish
 rel-pos-type: latest
 macaron-style: true
 use-cnn-module: true
-cnn-module-kernel: 15
+cnn-module-kernel: 5
 
 # Report CER & WER
 report-cer: true
 report-wer: true
 
 sampling-probability: 0.1
-use-ctc-alignment: true
+use-ctc-alignment: false
 use-inter-ctc: true
 inter-ctc-weight: 0.1
 use-stop-sign-ctc: false
