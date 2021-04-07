@@ -228,40 +228,27 @@ class LoadInputsAndTargets(object):
         xs = list(x_feats_dict.values())
 
         if self.load_output:
-            if len(y_feats_dict) == 1:
-                ys = list(y_feats_dict.values())
-                assert len(xs[0]) == len(ys[0]), (len(xs[0]), len(ys[0]))
+            ys = list(y_feats_dict.values())
+            assert len(xs[0]) == len(ys[0]), (len(xs[0]), len(ys[0]))
 
-                # get index of non-zero length samples
-                nonzero_idx = list(
-                    filter(lambda i: len(ys[0][i]) > 0, range(len(ys[0])))
+            # get index of non-zero length samples
+            nonzero_idx = list(filter(lambda i: len(ys[0][i]) > 0, range(len(ys[0]))))
+            for n in range(1, len(y_feats_dict)):
+                nonzero_idx = filter(lambda i: len(ys[n][i]) > 0, nonzero_idx)
+            nonzero_idx = list(nonzero_idx)
+
+            if self.load_alignment:
+                y_aligns = list(y_aligns_dict.values())
+                assert len(ys) == len(y_aligns), (
+                    "num_speakers",
+                    len(ys),
+                    len(y_aligns),
                 )
-                for n in range(1, len(y_feats_dict)):
-                    nonzero_idx = filter(lambda i: len(ys[n][i]) > 0, nonzero_idx)
-            elif len(y_feats_dict) > 1:  # multi spkr ASR
-                ys = list(y_feats_dict.values())
-                assert len(xs[0]) == len(ys[0]), (len(xs[0]), len(ys[0]))
-
-                # get index of non-zero length samples
-                nonzero_idx = list(
-                    filter(lambda i: len(ys[0][i]) > 0, range(len(ys[0])))
+                assert len(xs[0]) == len(y_aligns[0]), (
+                    "num_samples",
+                    len(xs[0]),
+                    len(y_aligns[0]),
                 )
-                for n in range(1, len(y_feats_dict)):
-                    nonzero_idx = filter(lambda i: len(ys[n][i]) > 0, nonzero_idx)
-                nonzero_idx = list(nonzero_idx)
-
-                if self.load_alignment:
-                    y_aligns = list(y_aligns_dict.values())
-                    assert len(ys) == len(y_aligns), (
-                        "num_speakers",
-                        len(ys),
-                        len(y_aligns),
-                    )
-                    assert len(xs[0]) == len(y_aligns[0]), (
-                        "num_samples",
-                        len(xs[0]),
-                        len(y_aligns[0]),
-                    )
         else:
             # Note(kamo): Be careful not to make nonzero_idx to a generator
             nonzero_idx = list(range(len(xs[0])))
@@ -285,28 +272,23 @@ class LoadInputsAndTargets(object):
 
         x_names = list(x_feats_dict.keys())
         if self.load_output:
-            if len(y_feats_dict) == 1:
-                ys = [[y[i] for i in nonzero_sorted_idx] for y in ys]
-            elif len(y_feats_dict) > 1:  # multi-speaker asr mode
-                # ys = zip(*[[y[i] for i in nonzero_sorted_idx] for y in ys])
-                ys = [[y[i] for i in nonzero_sorted_idx] for y in ys]
+            ys = [[y[i] for i in nonzero_sorted_idx] for y in ys]
 
-                if self.load_alignment:
-                    if len((y_aligns_dict)) > 0:  # y_aligns_dict exists
-                        y_aligns = [
-                            [y_align[i] for i in nonzero_sorted_idx]
-                            for y_align in y_aligns
-                        ]
-                    new_ys = []
-                    for i in range(len(ys)):  # num_speakers
-                        new_ys.append([])
-                        for j in range(len(ys[0])):  # num_samples
-                            new_ys[-1].append(
-                                OrderedDict(
-                                    [("seq", ys[i][j]), ("ctc_align", y_aligns[i][j])]
-                                )
+            if self.load_alignment:
+                if len((y_aligns_dict)) > 0:  # y_aligns_dict exists
+                    y_aligns = [
+                        [y_align[i] for i in nonzero_sorted_idx] for y_align in y_aligns
+                    ]
+                new_ys = []
+                for i in range(len(ys)):  # num_speakers
+                    new_ys.append([])
+                    for j in range(len(ys[0])):  # num_samples
+                        new_ys[-1].append(
+                            OrderedDict(
+                                [("seq", ys[i][j]), ("ctc_align", y_aligns[i][j])]
                             )
-                    ys = new_ys
+                        )
+                ys = new_ys
 
             y_names = list(y_feats_dict.keys())
 

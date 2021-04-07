@@ -65,7 +65,6 @@ class CustomConverter(object):
         self.subsampling_factor = subsampling_factor
         self.ignore_id = -1
         self.dtype = dtype
-        self.num_spkrs = num_spkrs
 
     def __call__(self, batch, device=torch.device("cpu")):
         """Transform a batch and send it to a device.
@@ -80,7 +79,8 @@ class CustomConverter(object):
         """
         # batch should be located in list
         assert len(batch) == 1
-        xs, ys = batch[0][0], batch[0][-self.num_spkrs :]
+        xs, ys = batch[0][0], batch[0][1:]
+        num_spkrs = len(ys)
 
         # perform subsampling
         if self.subsampling_factor > 1:
@@ -129,9 +129,7 @@ class CustomConverter(object):
                 ys_pad += [torch.from_numpy(y).long() for y in ys[i]]
             ys_pad = pad_list(ys_pad, self.ignore_id)
             ys_pad = (
-                ys_pad.view(self.num_spkrs, -1, ys_pad.size(1))
-                .transpose(0, 1)
-                .to(device)
+                ys_pad.view(num_spkrs, -1, ys_pad.size(1)).transpose(0, 1).to(device)
             )  # (B, num_spkrs, Tmax)
 
             if ys_ctc_align != []:  # CTC alignments
@@ -142,7 +140,7 @@ class CustomConverter(object):
                     ]
                 ys_ctc_align_pad = pad_list(ys_ctc_align_pad, self.ignore_id)
                 ys_ctc_align_pad = (
-                    ys_ctc_align_pad.view(self.num_spkrs, -1, ys_ctc_align_pad.size(1))
+                    ys_ctc_align_pad.view(num_spkrs, -1, ys_ctc_align_pad.size(1))
                     .transpose(0, 1)
                     .to(device)
                 )  # (B, num_spkrs, Tmax)
