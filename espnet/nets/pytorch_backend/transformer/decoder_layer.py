@@ -106,12 +106,15 @@ class DecoderLayer(nn.Module):
             x = residual + self.concat_linear1(tgt_concat)
         else:
             x = self.self_attn(tgt_q, tgt, tgt, tgt_q_mask, init_dp=init_dp)
+
+            # custom dropout layer
             if self.training and self.dropout_rate > 0.0:
                 if init_dp:
-                    self.dp_mask1 = torch.zeros_like(x).bernoulli_(
+                    self.dp_mask_self = torch.zeros_like(x).bernoulli_(
                         1 - self.dropout_rate
                     ) / (1 - self.dropout_rate)
-                x = self.dp_mask1 * x
+                x = self.dp_mask_self * x
+
             x = residual + x
 
         if not self.normalize_before:
@@ -128,12 +131,15 @@ class DecoderLayer(nn.Module):
             x = residual + self.concat_linear2(x_concat)
         else:
             x = self.src_attn(x, memory, memory, memory_mask, init_dp=init_dp)
+
+            # custom dropout layer
             if self.training and self.dropout_rate > 0.0:
                 if init_dp:
-                    self.dp_mask2 = torch.zeros_like(x).bernoulli_(
+                    self.dp_mask_src = torch.zeros_like(x).bernoulli_(
                         1 - self.dropout_rate
                     ) / (1 - self.dropout_rate)
-                x = self.dp_mask2 * x
+                x = self.dp_mask_src * x
+
             x = residual + x
 
         if not self.normalize_before:
@@ -144,12 +150,14 @@ class DecoderLayer(nn.Module):
             x = self.norm3(x)
 
         x = self.feed_forward(x, init_dp=init_dp)
+
+        # custom dropout layer
         if self.training and self.dropout_rate > 0.0:
             if init_dp:
-                self.dp_mask3 = torch.zeros_like(x).bernoulli_(
+                self.dp_mask_ff = torch.zeros_like(x).bernoulli_(
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
-            x = self.dp_mask3 * x
+            x = self.dp_mask_ff * x
         x = residual + x
 
         if not self.normalize_before:

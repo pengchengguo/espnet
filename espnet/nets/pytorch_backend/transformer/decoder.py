@@ -92,6 +92,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
         positional_dropout_rate=0.1,
         self_attention_dropout_rate=0.0,
         src_attention_dropout_rate=0.0,
+        adv_dropout_rate=0.0,
         input_layer="embed",
         use_output_layer=True,
         pos_enc_class=PositionalEncoding,
@@ -105,6 +106,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             self.embed = torch.nn.Embedding(odim, attention_dim)
             self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         elif input_layer == "linear":
+            logging.warning("Can not use cached dropout mask.")
             self.embed = torch.nn.Sequential(
                 torch.nn.Linear(odim, attention_dim),
                 torch.nn.LayerNorm(attention_dim),
@@ -113,11 +115,13 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             )
             self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         elif isinstance(input_layer, torch.nn.Module):
+            logging.warning("Can not use cached dropout mask.")
             self.embed = input_layer
             self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         else:
             raise NotImplementedError("only `embed` or torch.nn.Module is supported.")
         self.normalize_before = normalize_before
+        self.adv_dropout_rate = adv_dropout_rate
         if selfattention_layer_type == "selfattn":
             logging.info("decoder self-attention layer type = self-attention")
             self.decoders = repeat(
@@ -138,6 +142,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             )
         elif selfattention_layer_type == "lightconv":
             logging.info("decoder self-attention layer type = lightweight convolution")
+            logging.warning("Can not use cached dropout mask.")
             self.decoders = repeat(
                 num_blocks,
                 lambda lnum: DecoderLayer(
@@ -164,6 +169,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
                 "decoder self-attention layer "
                 "type = lightweight convolution 2-dimentional"
             )
+            logging.warning("Can not use cached dropout mask.")
             self.decoders = repeat(
                 num_blocks,
                 lambda lnum: DecoderLayer(
@@ -187,6 +193,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             )
         elif selfattention_layer_type == "dynamicconv":
             logging.info("decoder self-attention layer type = dynamic convolution")
+            logging.warning("Can not use cached dropout mask.")
             self.decoders = repeat(
                 num_blocks,
                 lambda lnum: DecoderLayer(
@@ -212,6 +219,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             logging.info(
                 "decoder self-attention layer type = dynamic convolution 2-dimentional"
             )
+            logging.warning("Can not use cached dropout mask.")
             self.decoders = repeat(
                 num_blocks,
                 lambda lnum: DecoderLayer(
@@ -241,7 +249,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
         else:
             self.output_layer = None
 
-    def forward(self, tgt, tgt_mask, memory, memory_mask, init_dp=True):
+    def forward(self, tgt, tgt_mask, memory, memory_mask, init_dp=True, adv_mask=None):
         """Forward decoder.
 
         Args:
@@ -255,6 +263,8 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             memory_mask (torch.Tensor): Encoded memory mask (#batch, maxlen_in).
                 dtype=torch.uint8 in PyTorch 1.2- and dtype=torch.bool in PyTorch 1.2+
                 (include 1.2).
+            init_dp (bool): Init a new dropout mask or use the cached one
+            adv_mask (torch.Tensor): inited adversarial dropout mask
 
         Returns:
             torch.Tensor: Decoded token score before softmax (#batch, maxlen_out, odim)
@@ -265,60 +275,55 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
         """
         x = self.embed(tgt)
         x = self.pos_enc(x, init_dp=init_dp)
-        # x, tgt_mask, memory, memory_mask = self.decoders(
-        #     x, tgt_mask, memory, memory_mask, init_dp=init_dp
-        # )
 
-        for decoder in self.decoders:
-            x, tgt_mask, memory, memory_mask = decoder(
+        for layer in self.decoders:
+            x, tgt_mask, memory, memory_mask = layer(
                 x, tgt_mask, memory, memory_mask, init_dp=init_dp
             )
 
         if self.normalize_before:
             x = self.after_norm(x)
+
+        # # for adversarial dropout regularization
+        # if self.training:
+        #     if adv_mask is None:
+        #         self.adv_mask = torch.zeros_like(x).bernoulli_(
+        #             1 - self.adv_dropout_rate
+        #         ) / (1 - self.adv_dropout_rate)
+        #     else:
+        #         self.adv_mask = adv_mask.detach().clone()
+        #     self.adv_mask.requires_grad_()
+        #     x = x * self.adv_mask
+
         if self.output_layer is not None:
             x = self.output_layer(x)
         return x, tgt_mask
 
-    def forward_one_step(self, tgt, tgt_mask, memory, cache=None, init_dp=True):
+    def forward_one_step(self, tgt, tgt_mask, memory, cache=None):
         """Forward one step.
 
-        <<<<<<< HEAD
-                :param torch.Tensor tgt: input token ids, int64 (batch, maxlen_out)
-                :param torch.Tensor tgt_mask: input token mask,  (batch, maxlen_out)
-                                              dtype=torch.uint8 in PyTorch 1.2-
-                                              dtype=torch.bool in PyTorch 1.2+ (include 1.2)
-                :param torch.Tensor memory: encoded memory, float32  (batch, maxlen_in, feat)
-                :param List[torch.Tensor] cache:
-                    cached output list of (batch, max_time_out-1, size)
-                :param bool: whether to init dropout mask by manually
-                :return y, cache: NN output value and cache per `self.decoders`.
-                    `y.shape` is (batch, maxlen_out, token)
-                :rtype: Tuple[torch.Tensor, List[torch.Tensor]]
-        =======
-                Args:
-                    tgt (torch.Tensor): Input token ids, int64 (#batch, maxlen_out).
-                    tgt_mask (torch.Tensor): Input token mask (#batch, maxlen_out).
-                        dtype=torch.uint8 in PyTorch 1.2- and dtype=torch.bool in PyTorch 1.2+
-                        (include 1.2).
-                    memory (torch.Tensor): Encoded memory, float32 (#batch, maxlen_in, feat).
-                    cache (List[torch.Tensor]): List of cached tensors.
-                        Each tensor shape should be (#batch, maxlen_out - 1, size).
+        Args:
+            tgt (torch.Tensor): Input token ids, int64 (#batch, maxlen_out).
+            tgt_mask (torch.Tensor): Input token mask (#batch, maxlen_out).
+                dtype=torch.uint8 in PyTorch 1.2- and dtype=torch.bool in PyTorch 1.2+
+                (include 1.2).
+            memory (torch.Tensor): Encoded memory, float32 (#batch, maxlen_in, feat).
+            cache (List[torch.Tensor]): List of cached tensors.
+                Each tensor shape should be (#batch, maxlen_out - 1, size).
 
-                Returns:
-                    torch.Tensor: Output tensor (batch, maxlen_out, odim).
-                    List[torch.Tensor]: List of cache tensors of each decoder layer.
+        Returns:
+            torch.Tensor: Output tensor (batch, maxlen_out, odim).
+            List[torch.Tensor]: List of cache tensors of each decoder layer.
 
-        >>>>>>> master
         """
         x = self.embed(tgt)
-        x = self.pos_enc(x, init_dp=init_dp)
+        x = self.pos_enc(x)
         if cache is None:
             cache = [None] * len(self.decoders)
         new_cache = []
         for c, decoder in zip(cache, self.decoders):
             x, tgt_mask, memory, memory_mask = decoder(
-                x, tgt_mask, memory, None, cache=c, init_dp=init_dp
+                x, tgt_mask, memory, None, cache=c
             )
             new_cache.append(x)
 

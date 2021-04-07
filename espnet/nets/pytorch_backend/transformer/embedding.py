@@ -9,6 +9,7 @@
 import math
 
 import torch
+from torch.nn.functional import dropout
 
 
 def _pre_hook(
@@ -90,6 +91,7 @@ class PositionalEncoding(torch.nn.Module):
 
         Args:
             x (torch.Tensor): Input tensor (batch, time, `*`).
+            init_dp (bool): Init a new dropout mask or use the cached one
 
         Returns:
             torch.Tensor: Encoded tensor (batch, time, `*`).
@@ -98,6 +100,7 @@ class PositionalEncoding(torch.nn.Module):
         self.extend_pe(x)
         x = x * self.xscale + self.pe[:, : x.size(1)]
 
+        # custom dropout layer
         if self.training and self.dropout_rate > 0.0:
             if init_dp:
                 self.dp_mask = torch.zeros_like(x).bernoulli_(1 - self.dropout_rate) / (
@@ -133,12 +136,8 @@ class ScaledPositionalEncoding(PositionalEncoding):
         """Add positional encoding.
 
         Args:
-<<<<<<< HEAD
-            x (torch.Tensor): Input. Its shape is (batch, time, ...)
-            init_dp (bool): whether to init dropout mask by manually
-=======
             x (torch.Tensor): Input tensor (batch, time, `*`).
->>>>>>> master
+            init_dp (bool): Init a new dropout mask or use the cached one
 
         Returns:
             torch.Tensor: Encoded tensor (batch, time, `*`).
@@ -147,6 +146,7 @@ class ScaledPositionalEncoding(PositionalEncoding):
         self.extend_pe(x)
         x = x + self.alpha * self.pe[:, : x.size(1)]
 
+        # custom dropout layer
         if self.training and self.dropout_rate > 0.0:
             if init_dp:
                 self.dp_mask = torch.zeros_like(x).bernoulli_(1 - self.dropout_rate) / (
@@ -184,12 +184,8 @@ class LegacyRelPositionalEncoding(PositionalEncoding):
         """Compute positional encoding.
 
         Args:
-<<<<<<< HEAD
-            x (torch.Tensor): Input. Its shape is (batch, time, ...)
-            init_dp (bool): whether to init dropout mask by manually
-=======
             x (torch.Tensor): Input tensor (batch, time, `*`).
->>>>>>> master
+            init_dp (bool): Init a new dropout mask or use the cached one
 
         Returns:
             torch.Tensor: Encoded tensor (batch, time, `*`).
@@ -199,25 +195,17 @@ class LegacyRelPositionalEncoding(PositionalEncoding):
         self.extend_pe(x)
         x = x * self.xscale
         pos_emb = self.pe[:, : x.size(1)]
-<<<<<<< HEAD
 
+        # custom dropout layer
         if self.training and self.dropout_rate > 0.0:
             if init_dp:
                 self.dp_mask1 = torch.zeros_like(x).bernoulli_(
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
-            x = self.dp_mask1 * x
-
-        if self.training and self.dropout_rate > 0.0:
-            if init_dp:
-                self.dp_mask2 = torch.zeros_like(x).bernoulli_(
-                    1 - self.dropout_rate
-                ) / (1 - self.dropout_rate)
-            pos_emb = self.dp_mask2 * pos_emb
+            x = self.dp_mask * x
+            pos_emb = self.dp_mask * pos_emb
 
         return x, pos_emb
-=======
-        return self.dropout(x), self.dropout(pos_emb)
 
 
 class RelPositionalEncoding(torch.nn.Module):
@@ -239,7 +227,7 @@ class RelPositionalEncoding(torch.nn.Module):
         super(RelPositionalEncoding, self).__init__()
         self.d_model = d_model
         self.xscale = math.sqrt(self.d_model)
-        self.dropout = torch.nn.Dropout(p=dropout_rate)
+        self.dropout_rate = dropout_rate
         self.pe = None
         self.extend_pe(torch.tensor(0.0).expand(1, max_len))
 
@@ -275,11 +263,12 @@ class RelPositionalEncoding(torch.nn.Module):
         pe = torch.cat([pe_positive, pe_negative], dim=1)
         self.pe = pe.to(device=x.device, dtype=x.dtype)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor, init_dp: bool):
         """Add positional encoding.
 
         Args:
             x (torch.Tensor): Input tensor (batch, time, `*`).
+            init_dp (bool): Init a new dropout mask or use the cached one
 
         Returns:
             torch.Tensor: Encoded tensor (batch, time, `*`).
@@ -291,5 +280,14 @@ class RelPositionalEncoding(torch.nn.Module):
             :,
             self.pe.size(1) // 2 - x.size(1) + 1 : self.pe.size(1) // 2 + x.size(1),
         ]
-        return self.dropout(x), self.dropout(pos_emb)
->>>>>>> master
+
+        # custom dropout layer
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask1 = torch.zeros_like(x).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            x = self.dp_mask * x
+            pos_emb = self.dp_mask * pos_emb
+
+        return x, pos_emb

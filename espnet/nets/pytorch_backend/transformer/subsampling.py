@@ -86,7 +86,6 @@ class Conv2dSubsampling(torch.nn.Module):
 
         if x_mask is None:
             return x, None
-
         return x, x_mask[:, :, :-2:2][:, :, :-2:2]
 
     def __getitem__(self, key):

@@ -64,23 +64,14 @@ class MultiHeadedAttention(nn.Module):
     def forward_attention(self, value, scores, mask, init_dp=True):
         """Compute attention context vector.
 
-        <<<<<<< HEAD
-                :param torch.Tensor value: (batch, head, time2, size)
-                :param torch.Tensor scores: (batch, head, time1, time2)
-                :param torch.Tensor mask: (batch, 1, time2) or (batch, time1, time2)
-                :param bool: whether to init dropout mask by manually
-                :return torch.Tensor transformed `value` (batch, time1, d_model)
-                    weighted by the attention score (batch, time1, time2)
-        =======
-                Args:
-                    value (torch.Tensor): Transformed value (#batch, n_head, time2, d_k).
-                    scores (torch.Tensor): Attention score (#batch, n_head, time1, time2).
-                    mask (torch.Tensor): Mask (#batch, 1, time2) or (#batch, time1, time2).
+        Args:
+            value (torch.Tensor): Transformed value (#batch, n_head, time2, d_k).
+            scores (torch.Tensor): Attention score (#batch, n_head, time1, time2).
+            mask (torch.Tensor): Mask (#batch, 1, time2) or (#batch, time1, time2).
 
-                Returns:
-                    torch.Tensor: Transformed value (#batch, time1, d_model)
-                        weighted by the attention score (#batch, time1, time2).
-        >>>>>>> master
+        Returns:
+            torch.Tensor: Transformed value (#batch, time1, d_model)
+                weighted by the attention score (#batch, time1, time2).
 
         """
         n_batch = value.size(0)
@@ -96,6 +87,7 @@ class MultiHeadedAttention(nn.Module):
         else:
             self.attn = torch.softmax(scores, dim=-1)  # (batch, head, time1, time2)
 
+        # custom dropout layer
         if self.training and self.dropout_rate > 0.0:
             if init_dp:
                 self.dp_mask = torch.zeros_like(self.attn).bernoulli_(
@@ -112,7 +104,7 @@ class MultiHeadedAttention(nn.Module):
 
         return self.linear_out(x)  # (batch, time1, d_model)
 
-    def forward(self, query, key, value, mask):
+    def forward(self, query, key, value, mask, init_dp=True):
         """Compute scaled dot product attention.
 
         Args:

@@ -166,6 +166,8 @@ class E2E(ASRInterface, torch.nn.Module):
         :param torch.Tensor xs_pad: batch of padded source sequences (B, Tmax, idim)
         :param torch.Tensor ilens: batch of lengths of source sequences (B)
         :param torch.Tensor ys_pad: batch of padded target sequences (B, Lmax)
+        :param bool init_dp: init a new dropout mask or use the cached one
+        :param bool record: whether to store acc and loss values to tensorboard
         :return: ctc loss value
         :rtype: torch.Tensor
         :return: attention loss value
@@ -185,7 +187,9 @@ class E2E(ASRInterface, torch.nn.Module):
                 ys_pad, self.sos, self.eos, self.ignore_id
             )
             ys_mask = target_mask(ys_in_pad, self.ignore_id)
-            pred_pad, pred_mask = self.decoder(ys_in_pad, ys_mask, hs_pad, hs_mask)
+            pred_pad, pred_mask = self.decoder(
+                ys_in_pad, ys_mask, hs_pad, hs_mask, init_dp=init_dp
+            )
             self.pred_pad = pred_pad
 
             # 3. compute attention loss

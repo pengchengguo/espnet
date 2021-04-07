@@ -297,8 +297,8 @@ class Encoder(torch.nn.Module):
             xs, masks = self.embed(xs, masks, init_dp=init_dp)
         else:
             xs = self.embed(xs, init_dp=init_dp)
-        # xs, masks = self.encoders(xs, masks, init_dp=init_dp)
 
+        # xs, masks = self.encoders(xs, masks, init_dp=init_dp)
         for encoder in self.encoders:
             xs, masks = encoder(xs, masks, init_dp=init_dp)
 

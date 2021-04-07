@@ -523,6 +523,7 @@ def get_parser(parser=None, required=True):
         choices=[
             None,
             "freelb",
+            "sadd",
         ],
         help="Adversarial training type.",
     )
@@ -533,25 +534,19 @@ def get_parser(parser=None, required=True):
         help="Adversarial training probability.",
     )
     parser.add_argument(
-        "--adv-weight",
-        type=float,
-        default=0.0,
-        help="Adversarial regularization loss weight.",
-    )
-    parser.add_argument(
-        "--adv-alpha",
+        "--adv-lr",
         type=float,
         default=0.025,
         help="Adversarial training learning rate.",
     )
     parser.add_argument(
-        "--adv-step",
+        "--adv-steps",
         type=int,
         default=3,
         help="Number of steps to update adversarial noise.",
     )
     parser.add_argument(
-        "--adv-init-bound",
+        "--rand-init-mag",
         type=float,
         default=0.4,
         help="Initial boundary of adversarial noise.",
@@ -563,17 +558,46 @@ def get_parser(parser=None, required=True):
         help="Epoch to start adversarial training.",
     )
     parser.add_argument(
-        "--adv-max-norm",
-        type=float,
-        default=0.3,
-        help="",
-    )
-    parser.add_argument(
         "--no-sync-dp",
         type=strtobool,
         default=False,
         help="Init a new dropout mask or use previous cached dropout mask.",
     )
+    parser.add_argument(
+        "--max-norm",
+        type=float,
+        default=0.3,
+        help="",
+    )
+    parser.add_argument(
+        "--norm-method",
+        type=str,
+        default="l2",
+        choices=[
+            "l2",
+            "linf",
+        ],
+        help="Adversarial training normalization method (for FreeLB method).",
+    )
+    parser.add_argument(
+        "--reg-weight",
+        type=float,
+        default=1.0,
+        help="Regularization weight for normal loss.",
+    )
+    # parser.add_argument(
+    #     "--attack-pos",
+    #     type=int,
+    #     default=1,
+    #     help="Attack position of adversarial dropout regularization."
+    #     "0 for Encoder, 1 for Decoder, 2 for both Encoder and Decoder.",
+    # )
+    # parser.add_argument(
+    #     "--adv-mask-diff",
+    #     type=float,
+    #     default=0.05,
+    #     help="Lower bound of mask difference for adversarial dropout.",
+    # )
     return parser
 
 
@@ -678,19 +702,22 @@ def main(cmd_args):
     # train
     logging.info("backend = " + args.backend)
 
-    if args.adv_type:
-        from espnet.asr.pytorch_backend.asr_adv import train
-
-        train(args)
-    elif args.num_spkrs == 1:
+    if args.num_spkrs == 1:
         if args.backend == "chainer":
             from espnet.asr.chainer_backend.asr import train
 
             train(args)
         elif args.backend == "pytorch":
-            from espnet.asr.pytorch_backend.asr import train
+            if args.adv_type is not None:
+                logging.warning("Conducting adversarial training")
+                from espnet.asr.pytorch_backend.asr_adv import train
 
-            train(args)
+                train(args)
+            else:
+                logging.warning("Conducting normal training")
+                from espnet.asr.pytorch_backend.asr import train
+
+                train(args)
         else:
             raise ValueError("Only chainer and pytorch are supported.")
     else:

@@ -92,14 +92,23 @@ class CTC(torch.nn.Module):
         :param torch.Tensor hlens: batch of lengths of hidden state sequences (B)
         :param torch.Tensor ys_pad:
             batch of padded character id sequence tensor (B, Lmax)
+        :param bool init_dp: init a new dropout mask or use the cached one
         :return: ctc loss value
         :rtype: torch.Tensor
         """
         # TODO(kan-bayashi): need to make more smart way
         ys = [y[y != self.ignore_id] for y in ys_pad]  # parse padded ys
 
-        # zero padding for hs
-        ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
+        # custom dropout layer
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask = torch.zeros_like(hs_pad).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            hs_pad = self.dp_mask * hs_pad
+
+        ys_hat = self.ctc_lo(hs_pad)
+
         if self.ctc_type != "gtnctc":
             ys_hat = ys_hat.transpose(0, 1)
 

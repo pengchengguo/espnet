@@ -31,6 +31,7 @@ class PositionwiseFeedForward(torch.nn.Module):
         """Forward funciton."""
         x = self.activation(self.w_1(x))
 
+        # custom dropout layer
         if self.training and self.dropout_rate > 0.0:
             if init_dp:
                 self.dp_mask = torch.zeros_like(x).bernoulli_(1 - self.dropout_rate) / (

@@ -62,6 +62,7 @@ class EncoderLayer(nn.Module):
             x_input (torch.Tensor): Input tensor (#batch, time, size).
             mask (torch.Tensor): Mask tensor for the input (#batch, time).
             cache (torch.Tensor): Cache tensor of the input (#batch, time - 1, size).
+            init_dp (bool): Init a new dropout mask or use the cached one.
 
         Returns:
             torch.Tensor: Output tensor (#batch, time, size).
@@ -88,12 +89,15 @@ class EncoderLayer(nn.Module):
             x = residual + self.concat_linear(x_concat)
         else:
             x = self.self_attn(x_q, x, x, mask, init_dp=init_dp)
+
+            # custom dropout layer
             if self.training and self.dropout_rate > 0.0:
                 if init_dp:
-                    self.dp_mask1 = torch.zeros_like(x).bernoulli_(
+                    self.dp_mask_attn = torch.zeros_like(x).bernoulli_(
                         1 - self.dropout_rate
                     ) / (1 - self.dropout_rate)
-                x = self.dp_mask1 * x
+                x = self.dp_mask_attn * x
+
             x = residual + x
 
         if not self.normalize_before:
@@ -104,12 +108,14 @@ class EncoderLayer(nn.Module):
             x = self.norm2(x)
 
         x = self.feed_forward(x, init_dp=init_dp)
+
+        # custom dropout layer
         if self.training and self.dropout_rate > 0.0:
             if init_dp:
-                self.dp_mask2 = torch.zeros_like(x).bernoulli_(
+                self.dp_mask_ff = torch.zeros_like(x).bernoulli_(
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
-            x = self.dp_mask2 * x
+            x = self.dp_mask_ff * x
         x = residual + x
 
         if not self.normalize_before:

@@ -166,19 +166,16 @@ def train(args):
         int(valid_json[utts[0]]["input"][i]["shape"][-1]) for i in range(args.num_encs)
     ]
     odim = int(valid_json[utts[0]]["output"][0]["shape"][-1])
+    if hasattr(args, "decoder_mode") and args.decoder_mode == "maskctc":
+        odim += 1  # for the <mask> token
     for i in range(args.num_encs):
         logging.info("stream{}: input dims : {}".format(i + 1, idim_list[i]))
     logging.info("#output dims: " + str(odim))
 
     # specify attention, CTC, hybrid mode
     if "transducer" in args.model_module:
-        if (
-            getattr(args, "etype", False) == "transformer"
-            or getattr(args, "dtype", False) == "transformer"
-        ):
-            mtl_mode = "transformer_transducer"
-        else:
-            mtl_mode = "transducer"
+        assert args.mtlalpha == 1.0
+        mtl_mode = "transducer"
         logging.info("Pure transducer mode")
     elif args.mtlalpha == 1.0:
         mtl_mode = "ctc"
@@ -198,7 +195,6 @@ def train(args):
             idim_list[0] if args.num_encs == 1 else idim_list, odim, args
         )
     assert isinstance(model, ASRInterface)
-    total_subsampling_factor = model.get_total_subsampling_factor()
 
     logging.info(
         " Total parameter of the model = "
@@ -259,16 +255,6 @@ def train(args):
     else:
         model_params = model.parameters()
 
-    logging.warning(
-        "num. model params: {:,} (num. trained: {:,} ({:.1f}%))".format(
-            sum(p.numel() for p in model.parameters()),
-            sum(p.numel() for p in model.parameters() if p.requires_grad),
-            sum(p.numel() for p in model.parameters() if p.requires_grad)
-            * 100.0
-            / sum(p.numel() for p in model.parameters()),
-        )
-    )
-
     # Setup an optimizer
     if args.opt == "adadelta":
         optimizer = torch.optim.Adadelta(
@@ -279,15 +265,8 @@ def train(args):
     elif args.opt == "noam":
         from espnet.nets.pytorch_backend.transformer.optimizer import get_std_opt
 
-        # For transformer-transducer, adim declaration is within the block definition.
-        # Thus, we need retrieve the most dominant value (d_hidden) for Noam scheduler.
-        if hasattr(args, "enc_block_arch") or hasattr(args, "dec_block_arch"):
-            adim = model.most_dom_dim
-        else:
-            adim = args.adim
-
         optimizer = get_std_opt(
-            model_params, adim, args.transformer_warmup_steps, args.transformer_lr
+            model_params, args.adim, args.transformer_warmup_steps, args.transformer_lr
         )
     else:
         raise NotImplementedError("unknown optimizer: " + args.opt)
@@ -419,14 +398,6 @@ def train(args):
             norm_method=args.norm_method,
             reg_weight=args.reg_weight,
         )
-
-        # modify the epoch based on adv_steps
-        # logging.warning(
-        #     "For FreeLB training, training epochs are automatically decreased (%d -> %d)."
-        #     % (args.epochs, args.epochs // args.adv_steps + 1)
-        # )
-        # args.epochs = args.epochs // args.adv_steps + 1
-
     else:
         raise ValueError("Not implemented.")
 
@@ -467,13 +438,12 @@ def train(args):
             CustomEvaluator(model, {"main": valid_iter}, reporter, device, args.ngpu)
         )
 
-    # Save attention weight each epoch
+    # Save attention weight at each epoch
     is_attn_plot = (
-        "transformer" in args.model_module
+        mtl_mode in ["att", "mtl"]
+        or "transformer" in args.model_module
         or "conformer" in args.model_module
-        or mtl_mode in ["att", "mtl"]
-    ) or mtl_mode == "transformer_transducer"
-
+    )
     if args.num_save_attention > 0 and is_attn_plot:
         data = sorted(
             list(valid_json.items())[: args.num_save_attention],
@@ -493,7 +463,6 @@ def train(args):
             converter=converter,
             transform=load_cv,
             device=device,
-            subsampling_factor=total_subsampling_factor,
         )
         trainer.extend(att_reporter, trigger=(1, "epoch"))
     else:
@@ -502,6 +471,9 @@ def train(args):
     # Save CTC prob at each epoch
     if mtl_mode in ["ctc", "mtl"] and args.num_save_ctc > 0:
         # NOTE: sort it by output lengths
+        import pdb
+
+        pdb.set_trace()
         data = sorted(
             list(valid_json.items())[: args.num_save_ctc],
             key=lambda x: int(x[1]["output"][0]["shape"][0]),
@@ -520,7 +492,8 @@ def train(args):
             converter=converter,
             transform=load_cv,
             device=device,
-            subsampling_factor=total_subsampling_factor,
+            ikey="output",
+            iaxis=1,
         )
         trainer.extend(ctc_reporter, trigger=(1, "epoch"))
     else:
@@ -568,7 +541,7 @@ def train(args):
         snapshot_object(model, "model.loss.best"),
         trigger=training.triggers.MinValueTrigger("validation/main/loss"),
     )
-    if mtl_mode not in ["ctc", "transducer", "transformer_transducer"]:
+    if mtl_mode not in ["ctc", "transducer"]:
         trainer.extend(
             snapshot_object(model, "model.acc.best"),
             trigger=training.triggers.MaxValueTrigger("validation/main/acc"),
@@ -580,9 +553,8 @@ def train(args):
             torch_snapshot(filename="snapshot.iter.{.updater.iteration}"),
             trigger=(args.save_interval_iters, "iteration"),
         )
-
-    # save snapshot at every epoch - for model averaging
-    trainer.extend(torch_snapshot(), trigger=(1, "epoch"))
+    else:
+        trainer.extend(torch_snapshot(), trigger=(1, "epoch"))
 
     # epsilon decay in the optimizer
     if args.opt == "adadelta":
