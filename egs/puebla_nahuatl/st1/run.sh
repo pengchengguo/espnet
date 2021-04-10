@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 #  Copyright 2021 Johns Hopkins University (Jiatong Shi)
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
@@ -8,7 +8,7 @@
 
 # general configuration
 backend=pytorch
-stage=0       # start from 0 if you need to start from data preparation
+stage=0        # start from 0 if you need to start from data preparation
 stop_stage=100
 ngpu=1         # number of gpus ("0" uses cpu, otherwise use gpu)
 debugmode=1
@@ -72,18 +72,21 @@ recog_set="${train_dev} ${test_set}"
 
 if [ ${stage} -le -1 ] && [ ${stop_stage} -ge -1 ]; then
     # Download the Data
-   local/download_and_untar.sh local  http://www.openslr.org/resources/92/Pueble-Nahuatl-Manifest.tgz Pueble-Nahuatl-Manifest.tgz
-   local/download_and_untar.sh ${download_dir} http://www.openslr.org/resources/92/Sound-Files-Pueble-Nahuatl.tgz.part0 Sound-Files-Pueble-Nahuatl.tgz.part0 9
+   local/download_and_untar.sh local  https://www.openslr.org/resources/92/Puebla-Nahuatl-Manifest.tgz Puebla-Nahuatl-Manifest.tgz
+   local/download_and_untar.sh ${download_dir} https://www.openslr.org/resources/92/Sound-Files-Puebla-Nahuatl.tgz.part0 Sound-Files-Puebla-Nahuatl.tgz.part0 9
    local/download_and_untar.sh ${download_dir} https://www.openslr.org/resources/92/SpeechTranslation_Nahuatl_Manifest.tgz SpeechTranslation_Nahuatl_Manifest.tgz
 fi
 
 if [ ${stage} -le 0 ] && [ ${stop_stage} -ge 0 ]; then
     ### Task dependent. You have to make data the following preparation part by yourself.
+    mkdir -p remixed
     for x in train dev test; do
         python local/data_prep.py -w $wavdir -t data/${x}_${annotation_id} -m ${annotation_type} -i local/speaker_wav_mapping_nahuatl_${x}.csv -a ${annotation_dir}
         cp data/${x}_${annotation_id}/text.${src_lang} data/${x}_${annotation_id}/text.tc.${src_lang}
         cp data/${x}_${annotation_id}/text.${tgt_lang} data/${x}_${annotation_id}/text.tc.${tgt_lang}
         utils/fix_data_dir.sh --utt_extra_files "text.${src_lang} text.${tgt_lang} text.tc.${src_lang} text.tc.${tgt_lang}" data/${x}_${annotation_id}
+        # shellcheck disable=SC1090
+        . ./data/${x}_st/remix_script.sh
     done
 
 fi
@@ -133,7 +136,6 @@ if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
     mkdir -p data/lang_1spm/
 
     # echo "make a non-linguistic symbol list for all languages"
-    # grep sp1.0 data/${train_set}.*/text.${tgt_case} | cut -f 2- -d' ' | grep -o -P '&[^;]*;'| sort | uniq > ${nlsyms}
     echo "" > ${nlsyms}
     cat ${nlsyms}
 
