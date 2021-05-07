@@ -37,6 +37,7 @@ gpu_inference=false  # Whether to perform gpu decoding.
 dumpdir=dump         # Directory to dump features.
 expdir=exp           # Directory to save experiments.
 python=python3       # Specify python to execute espnet commands.
+device=0
 
 # Data preparation related
 local_data_opts= # The options given to local/data.sh.
@@ -139,6 +140,7 @@ Options:
     --dumpdir        # Directory to dump features (default="${dumpdir}").
     --expdir         # Directory to save experiments (default="${expdir}").
     --python         # Specify python to execute espnet commands (default="${python}").
+    --device         # Which GPUs are use for local training (default="${device}").
 
     # Data preparation related
     --local_data_opts # The options given to local/data.sh (default="${local_data_opts}").
@@ -826,6 +828,7 @@ if ! "${skip_train}"; then
             fi
 
             # shellcheck disable=SC2086
+            CUDA_VISIBLE_DEVICES=${device}\
             ${python} -m espnet2.bin.launch \
                 --cmd "${cuda_cmd} --name ${jobname}" \
                 --log "${lm_exp}"/train.log \
@@ -858,6 +861,7 @@ if ! "${skip_train}"; then
             # TODO(kamo): Parallelize?
             log "Perplexity calculation started... log: '${lm_exp}/perplexity_test/lm_calc_perplexity.log'"
             # shellcheck disable=SC2086
+            CUDA_VISIBLE_DEVICES=${device}\
             ${cuda_cmd} --gpu "${ngpu}" "${lm_exp}"/perplexity_test/lm_calc_perplexity.log \
                 ${python} -m espnet2.bin.lm_calc_perplexity \
                     --ngpu "${ngpu}" \
@@ -1059,6 +1063,7 @@ if ! "${skip_train}"; then
         fi
 
         # shellcheck disable=SC2086
+        CUDA_VISIBLE_DEVICES=${device}\
         ${python} -m espnet2.bin.launch \
             --cmd "${cuda_cmd} --name ${jobname}" \
             --log "${asr_exp}"/train.log \

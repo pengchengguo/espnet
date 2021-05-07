@@ -12,6 +12,7 @@ import torch
 from typeguard import check_argument_types
 from typeguard import check_return_type
 
+from espnet2.asr.adversary.fgsm import FastGradientSignMethod
 from espnet2.asr.ctc import CTC
 from espnet2.asr.decoder.abs_decoder import AbsDecoder
 from espnet2.asr.decoder.rnn_decoder import RNNDecoder
@@ -117,6 +118,14 @@ decoder_choices = ClassChoices(
     type_check=AbsDecoder,
     default="rnn",
 )
+adversary_choices = ClassChoices(
+    "adversary",
+    classes=dict(
+        fgsm=FastGradientSignMethod,
+    ),
+    default=None,
+    optional=True,
+)
 
 
 class ASRTask(AbsTask):
@@ -137,6 +146,8 @@ class ASRTask(AbsTask):
         encoder_choices,
         # --decoder and --decoder_conf
         decoder_choices,
+        # --adversary and --adversary_conf
+        adversary_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here

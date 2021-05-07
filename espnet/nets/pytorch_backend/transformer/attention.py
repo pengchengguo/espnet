@@ -94,6 +94,7 @@ class MultiHeadedAttention(nn.Module):
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
             p_attn = self.dp_mask * self.attn
+            assert self.dp_mask is not None, "missing dropout mask, set init_dp = True"
         else:
             p_attn = self.attn
 
@@ -173,7 +174,7 @@ class LegacyRelPositionMultiHeadedAttention(MultiHeadedAttention):
 
         return x
 
-    def forward(self, query, key, value, pos_emb, mask):
+    def forward(self, query, key, value, pos_emb, mask, init_dp=True):
         """Compute 'Scaled Dot Product Attention' with rel. positional encoding.
 
         Args:
@@ -183,6 +184,7 @@ class LegacyRelPositionMultiHeadedAttention(MultiHeadedAttention):
             pos_emb (torch.Tensor): Positional embedding tensor (#batch, time1, size).
             mask (torch.Tensor): Mask tensor (#batch, 1, time2) or
                 (#batch, time1, time2).
+            init_dp (bool): Init a new dropout mask or use the cached one.
 
         Returns:
             torch.Tensor: Output tensor (#batch, time1, d_model).
@@ -215,7 +217,7 @@ class LegacyRelPositionMultiHeadedAttention(MultiHeadedAttention):
             self.d_k
         )  # (batch, head, time1, time2)
 
-        return self.forward_attention(v, scores, mask)
+        return self.forward_attention(v, scores, mask, init_dp=init_dp)
 
 
 class RelPositionMultiHeadedAttention(MultiHeadedAttention):
@@ -271,7 +273,7 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
 
         return x
 
-    def forward(self, query, key, value, pos_emb, mask):
+    def forward(self, query, key, value, pos_emb, mask, init_dp):
         """Compute 'Scaled Dot Product Attention' with rel. positional encoding.
 
         Args:
@@ -282,6 +284,7 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
                 (#batch, 2*time1-1, size).
             mask (torch.Tensor): Mask tensor (#batch, 1, time2) or
                 (#batch, time1, time2).
+            init_dp (bool): Init a new dropout mask or use the cached one.
 
         Returns:
             torch.Tensor: Output tensor (#batch, time1, d_model).
@@ -314,4 +317,4 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
             self.d_k
         )  # (batch, head, time1, time2)
 
-        return self.forward_attention(v, scores, mask)
+        return self.forward_attention(v, scores, mask, init_dp=init_dp)

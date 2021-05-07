@@ -70,6 +70,7 @@ class Conv2dSubsampling(torch.nn.Module):
         Args:
             x (torch.Tensor): Input tensor (#batch, time, idim).
             x_mask (torch.Tensor): Input mask (#batch, 1, time).
+            init_dp (bool): Init a new dropout mask or use the cached one
 
         Returns:
             torch.Tensor: Subsampled tensor (#batch, time', odim),

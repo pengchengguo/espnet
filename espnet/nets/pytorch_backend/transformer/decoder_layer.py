@@ -113,6 +113,9 @@ class DecoderLayer(nn.Module):
                     self.dp_mask_self = torch.zeros_like(x).bernoulli_(
                         1 - self.dropout_rate
                     ) / (1 - self.dropout_rate)
+                assert (
+                    self.dp_mask_self is not None
+                ), "missing dropout mask, set init_dp = True"
                 x = self.dp_mask_self * x
 
             x = residual + x
@@ -138,6 +141,9 @@ class DecoderLayer(nn.Module):
                     self.dp_mask_src = torch.zeros_like(x).bernoulli_(
                         1 - self.dropout_rate
                     ) / (1 - self.dropout_rate)
+                assert (
+                    self.dp_mask_src is not None
+                ), "missing dropout mask, set init_dp = True"
                 x = self.dp_mask_src * x
 
             x = residual + x
@@ -157,7 +163,11 @@ class DecoderLayer(nn.Module):
                 self.dp_mask_ff = torch.zeros_like(x).bernoulli_(
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
+            assert (
+                self.dp_mask_ff is not None
+            ), "missing dropout mask, set init_dp = True"
             x = self.dp_mask_ff * x
+
         x = residual + x
 
         if not self.normalize_before:

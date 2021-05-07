@@ -7,6 +7,7 @@
 
 """Encoder self-attention layer definition."""
 
+from posix import XATTR_REPLACE
 import torch
 
 from torch import nn
@@ -66,14 +67,14 @@ class EncoderLayer(nn.Module):
         if self.conv_module is not None:
             self.norm_conv = LayerNorm(size)  # for the CNN module
             self.norm_final = LayerNorm(size)  # for the final output of the block
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropout_rate = dropout_rate
         self.size = size
         self.normalize_before = normalize_before
         self.concat_after = concat_after
         if self.concat_after:
             self.concat_linear = nn.Linear(size + size, size)
 
-    def forward(self, x_input, mask, cache=None):
+    def forward(self, x_input, mask, cache=None, init_dp=True):
         """Compute encoded features.
 
         Args:
@@ -82,6 +83,7 @@ class EncoderLayer(nn.Module):
                 - w/o pos emb: Tensor (#batch, time, size).
             mask (torch.Tensor): Mask tensor for the input (#batch, time).
             cache (torch.Tensor): Cache tensor of the input (#batch, time - 1, size).
+            init_dp (bool): Init a new dropout mask or use the cached one.
 
         Returns:
             torch.Tensor: Output tensor (#batch, time, size).
@@ -98,7 +100,21 @@ class EncoderLayer(nn.Module):
             residual = x
             if self.normalize_before:
                 x = self.norm_ff_macaron(x)
-            x = residual + self.ff_scale * self.dropout(self.feed_forward_macaron(x))
+
+            x = self.feed_forward_macaron(x, init_dp=init_dp)
+
+            # custom dropout layer
+            if self.training and self.dropout_rate > 0.0:
+                if init_dp:
+                    self.dp_mask_ff2 = torch.zeros_like(x).bernoulli_(
+                        1 - self.dropout_rate
+                    ) / (1 - self.dropout_rate)
+                assert (
+                    self.dp_mask_ff2 is not None
+                ), "missing dropout mask, set init_dp = True"
+                x = self.dp_mask_ff2 * x
+
+            x = residual + self.ff_scale * x
             if not self.normalize_before:
                 x = self.norm_ff_macaron(x)
 
@@ -116,15 +132,26 @@ class EncoderLayer(nn.Module):
             mask = None if mask is None else mask[:, -1:, :]
 
         if pos_emb is not None:
-            x_att = self.self_attn(x_q, x, x, pos_emb, mask)
+            x_att = self.self_attn(x_q, x, x, pos_emb, mask, init_dp=init_dp)
         else:
-            x_att = self.self_attn(x_q, x, x, mask)
+            x_att = self.self_attn(x_q, x, x, mask, init_dp=init_dp)
 
         if self.concat_after:
             x_concat = torch.cat((x, x_att), dim=-1)
             x = residual + self.concat_linear(x_concat)
         else:
-            x = residual + self.dropout(x_att)
+            # custom dropout layer
+            if self.training and self.dropout_rate > 0.0:
+                if init_dp:
+                    self.dp_mask_attn = torch.zeros_like(x_att).bernoulli_(
+                        1 - self.dropout_rate
+                    ) / (1 - self.dropout_rate)
+                assert (
+                    self.dp_mask_attn is not None
+                ), "missing dropout mask, set init_dp = True"
+                x = self.dp_mask_attn * x_att
+
+            x = residual + x
         if not self.normalize_before:
             x = self.norm_mha(x)
 
@@ -133,7 +160,20 @@ class EncoderLayer(nn.Module):
             residual = x
             if self.normalize_before:
                 x = self.norm_conv(x)
-            x = residual + self.dropout(self.conv_module(x))
+            x = self.conv_module(x)
+
+            # custom dropout layer
+            if self.training and self.dropout_rate > 0.0:
+                if init_dp:
+                    self.dp_mask_conv = torch.zeros_like(x).bernoulli_(
+                        1 - self.dropout_rate
+                    ) / (1 - self.dropout_rate)
+                assert (
+                    self.dp_mask_conv is not None
+                ), "missing dropout mask, set init_dp = True"
+                x = self.dp_mask_conv * x
+
+            x = residual + x
             if not self.normalize_before:
                 x = self.norm_conv(x)
 
@@ -141,7 +181,21 @@ class EncoderLayer(nn.Module):
         residual = x
         if self.normalize_before:
             x = self.norm_ff(x)
-        x = residual + self.ff_scale * self.dropout(self.feed_forward(x))
+
+        x = self.feed_forward(x, init_dp=init_dp)
+
+        # custom dropout layer
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask_ff = torch.zeros_like(x).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            assert (
+                self.dp_mask_ff is not None
+            ), "missing dropout mask, set init_dp = True"
+            x = self.dp_mask_ff * x
+
+        x = residual + self.ff_scale * x
         if not self.normalize_before:
             x = self.norm_ff(x)
 

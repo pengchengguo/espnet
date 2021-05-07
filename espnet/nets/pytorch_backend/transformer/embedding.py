@@ -106,6 +106,7 @@ class PositionalEncoding(torch.nn.Module):
                 self.dp_mask = torch.zeros_like(x).bernoulli_(1 - self.dropout_rate) / (
                     1 - self.dropout_rate
                 )
+            assert self.dp_mask is not None, "missing dropout mask, set init_dp = True"
             x = self.dp_mask * x
 
         return x
@@ -152,6 +153,7 @@ class ScaledPositionalEncoding(PositionalEncoding):
                 self.dp_mask = torch.zeros_like(x).bernoulli_(1 - self.dropout_rate) / (
                     1 - self.dropout_rate
                 )
+            assert self.dp_mask is not None, "missing dropout mask, set init_dp = True"
             x = self.dp_mask * x
 
         return x
@@ -199,11 +201,18 @@ class LegacyRelPositionalEncoding(PositionalEncoding):
         # custom dropout layer
         if self.training and self.dropout_rate > 0.0:
             if init_dp:
-                self.dp_mask1 = torch.zeros_like(x).bernoulli_(
+                self.dp_mask_x = torch.zeros_like(x).bernoulli_(
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
-            x = self.dp_mask * x
-            pos_emb = self.dp_mask * pos_emb
+                self.dp_mask_pos = torch.zeros_like(pos_emb).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            assert (
+                self.dp_mask_x is not None,
+                self.dp_mask_pos is not None,
+            ), "missing dropout mask, set init_dp = True"
+            x = self.dp_mask_x * x
+            pos_emb = self.dp_mask_pos * pos_emb
 
         return x, pos_emb
 
@@ -263,7 +272,7 @@ class RelPositionalEncoding(torch.nn.Module):
         pe = torch.cat([pe_positive, pe_negative], dim=1)
         self.pe = pe.to(device=x.device, dtype=x.dtype)
 
-    def forward(self, x: torch.Tensor, init_dp: bool):
+    def forward(self, x, init_dp=True):
         """Add positional encoding.
 
         Args:
@@ -284,10 +293,17 @@ class RelPositionalEncoding(torch.nn.Module):
         # custom dropout layer
         if self.training and self.dropout_rate > 0.0:
             if init_dp:
-                self.dp_mask1 = torch.zeros_like(x).bernoulli_(
+                self.dp_mask_x = torch.zeros_like(x).bernoulli_(
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
-            x = self.dp_mask * x
-            pos_emb = self.dp_mask * pos_emb
+                self.dp_mask_pos = torch.zeros_like(pos_emb).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+            assert (
+                self.dp_mask_x is not None,
+                self.dp_mask_pos is not None,
+            ), "missing dropout mask, set init_dp = True"
+            x = self.dp_mask_x * x
+            pos_emb = self.dp_mask_pos * pos_emb
 
         return x, pos_emb

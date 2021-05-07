@@ -37,6 +37,7 @@ class PositionwiseFeedForward(torch.nn.Module):
                 self.dp_mask = torch.zeros_like(x).bernoulli_(1 - self.dropout_rate) / (
                     1 - self.dropout_rate
                 )
+            assert self.dp_mask is not None, "missing dropout mask, set init_dp = True"
             x = self.dp_mask * x
 
         return self.w_2(x)

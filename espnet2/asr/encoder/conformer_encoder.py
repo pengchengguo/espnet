@@ -299,6 +299,5 @@ class ConformerEncoder(AbsEncoder):
             xs_pad = xs_pad[0]
         if self.normalize_before:
             xs_pad = self.after_norm(xs_pad)
-
         olens = masks.squeeze(1).sum(1)
         return xs_pad, olens, None

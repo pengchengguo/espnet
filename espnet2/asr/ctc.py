@@ -121,7 +121,7 @@ class CTC(torch.nn.Module):
         else:
             raise NotImplementedError
 
-    def forward(self, hs_pad, hlens, ys_pad, ys_lens):
+    def forward(self, hs_pad, hlens, ys_pad, ys_lens, init_dp=True):
         """Calculate CTC loss.
 
         Args:
@@ -129,9 +129,20 @@ class CTC(torch.nn.Module):
             hlens: batch of lengths of hidden state sequences (B)
             ys_pad: batch of padded character id sequence tensor (B, Lmax)
             ys_lens: batch of lengths of character sequence (B)
+            init_dp: init a new dropout mask or use the cached one
         """
+        # custom dropout layer
+        if self.training and self.dropout_rate > 0.0:
+            if init_dp:
+                self.dp_mask = torch.zeros_like(hs_pad).bernoulli_(
+                    1 - self.dropout_rate
+                ) / (1 - self.dropout_rate)
+
+            assert self.dp_mask is not None, "missing dropout mask, set init_dp = True"
+            hs_pad = self.dp_mask * hs_pad
+
         # hs_pad: (B, L, NProj) -> ys_hat: (B, L, Nvocab)
-        ys_hat = self.ctc_lo(F.dropout(hs_pad, p=self.dropout_rate))
+        ys_hat = self.ctc_lo(hs_pad)
         # ys_hat: (B, L, D) -> (L, B, D)
         ys_hat = ys_hat.transpose(0, 1)
 
