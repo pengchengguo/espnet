@@ -7,7 +7,6 @@
 
 """Encoder self-attention layer definition."""
 
-from posix import XATTR_REPLACE
 import torch
 
 from torch import nn
