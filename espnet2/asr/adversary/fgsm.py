@@ -17,7 +17,6 @@ class FastGradientSignMethod(object):
         adv_prob=1.0,
         adv_lr=0.1,
         adv_weight=0.3,
-        no_sync_dp=False,
     ):
         """Construct a FastGradientSignMethod object.
 
@@ -35,7 +34,6 @@ class FastGradientSignMethod(object):
         self.adv_prob = adv_prob
         self.adv_lr = adv_lr
         self.adv_weight = adv_weight
-        self.no_sync_dp = no_sync_dp
 
     def __call__(self, model):
         return model

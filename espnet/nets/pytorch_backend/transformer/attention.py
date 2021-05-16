@@ -94,7 +94,6 @@ class MultiHeadedAttention(nn.Module):
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
             p_attn = self.dp_mask * self.attn
-            assert self.dp_mask is not None, "missing dropout mask, set init_dp = True"
         else:
             p_attn = self.attn
 
@@ -273,7 +272,7 @@ class RelPositionMultiHeadedAttention(MultiHeadedAttention):
 
         return x
 
-    def forward(self, query, key, value, pos_emb, mask, init_dp):
+    def forward(self, query, key, value, pos_emb, mask, init_dp=True):
         """Compute 'Scaled Dot Product Attention' with rel. positional encoding.
 
         Args:

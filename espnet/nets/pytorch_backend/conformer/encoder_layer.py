@@ -108,9 +108,6 @@ class EncoderLayer(nn.Module):
                     self.dp_mask_ff2 = torch.zeros_like(x).bernoulli_(
                         1 - self.dropout_rate
                     ) / (1 - self.dropout_rate)
-                assert (
-                    self.dp_mask_ff2 is not None
-                ), "missing dropout mask, set init_dp = True"
                 x = self.dp_mask_ff2 * x
 
             x = residual + self.ff_scale * x
@@ -145,9 +142,6 @@ class EncoderLayer(nn.Module):
                     self.dp_mask_attn = torch.zeros_like(x_att).bernoulli_(
                         1 - self.dropout_rate
                     ) / (1 - self.dropout_rate)
-                assert (
-                    self.dp_mask_attn is not None
-                ), "missing dropout mask, set init_dp = True"
                 x = self.dp_mask_attn * x_att
 
             x = residual + x
@@ -167,9 +161,6 @@ class EncoderLayer(nn.Module):
                     self.dp_mask_conv = torch.zeros_like(x).bernoulli_(
                         1 - self.dropout_rate
                     ) / (1 - self.dropout_rate)
-                assert (
-                    self.dp_mask_conv is not None
-                ), "missing dropout mask, set init_dp = True"
                 x = self.dp_mask_conv * x
 
             x = residual + x
@@ -189,9 +180,6 @@ class EncoderLayer(nn.Module):
                 self.dp_mask_ff = torch.zeros_like(x).bernoulli_(
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
-            assert (
-                self.dp_mask_ff is not None
-            ), "missing dropout mask, set init_dp = True"
             x = self.dp_mask_ff * x
 
         x = residual + self.ff_scale * x

@@ -109,6 +109,7 @@ class ESPnetASRModel(AbsESPnetModel):
         speech_lengths: torch.Tensor,
         text: torch.Tensor,
         text_lengths: torch.Tensor,
+        no_sync_dp: bool = True,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
         """Frontend + Encoder + Decoder + Calc loss
 
@@ -117,6 +118,7 @@ class ESPnetASRModel(AbsESPnetModel):
             speech_lengths: (Batch, )
             text: (Batch, Length)
             text_lengths: (Batch,)
+            no_sync_dp: bool
         """
         assert text_lengths.dim() == 1, text_lengths.shape
         # Check that batch_size is unified
@@ -132,14 +134,16 @@ class ESPnetASRModel(AbsESPnetModel):
         text = text[:, : text_lengths.max()]
 
         # 1. Encoder
-        encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
+        encoder_out, encoder_out_lens = self.encode(
+            speech, speech_lengths, init_dp=no_sync_dp
+        )
 
         # 2a. Attention-decoder branch
         if self.ctc_weight == 1.0:
             loss_att, acc_att, cer_att, wer_att = None, None, None, None
         else:
             loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-                encoder_out, encoder_out_lens, text, text_lengths
+                encoder_out, encoder_out_lens, text, text_lengths, init_dp=no_sync_dp
             )
 
         # 2b. CTC branch
@@ -147,7 +151,7 @@ class ESPnetASRModel(AbsESPnetModel):
             loss_ctc, cer_ctc = None, None
         else:
             loss_ctc, cer_ctc = self._calc_ctc_loss(
-                encoder_out, encoder_out_lens, text, text_lengths
+                encoder_out, encoder_out_lens, text, text_lengths, init_dp=no_sync_dp
             )
 
         # 2c. RNN-T branch
@@ -186,13 +190,17 @@ class ESPnetASRModel(AbsESPnetModel):
         return {"feats": feats, "feats_lengths": feats_lengths}
 
     def encode(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor
+        self,
+        speech: torch.Tensor,
+        speech_lengths: torch.Tensor,
+        init_dp: bool = True,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_inference.py
 
         Args:
             speech: (Batch, Length, ...)
             speech_lengths: (Batch, )
+            init_dp: bool
         """
         with autocast(False):
             # 1. Extract feats
@@ -213,7 +221,9 @@ class ESPnetASRModel(AbsESPnetModel):
         # 4. Forward encoder
         # feats: (Batch, Length, Dim)
         # -> encoder_out: (Batch, Length2, Dim2)
-        encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths)
+        encoder_out, encoder_out_lens, _ = self.encoder(
+            feats, feats_lengths, init_dp=init_dp
+        )
 
         assert encoder_out.size(0) == speech.size(0), (
             encoder_out.size(),
@@ -251,13 +261,14 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
+        init_dp: bool = True,
     ):
         ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
         ys_in_lens = ys_pad_lens + 1
 
         # 1. Forward decoder
         decoder_out, _ = self.decoder(
-            encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens
+            encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens, init_dp=init_dp
         )
 
         # 2. Compute attention loss
@@ -283,9 +294,12 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
+        init_dp: bool = True,
     ):
         # Calc CTC loss
-        loss_ctc = self.ctc(encoder_out, encoder_out_lens, ys_pad, ys_pad_lens)
+        loss_ctc = self.ctc(
+            encoder_out, encoder_out_lens, ys_pad, ys_pad_lens, init_dp=init_dp
+        )
 
         # Calc CER using CTC
         cer_ctc = None

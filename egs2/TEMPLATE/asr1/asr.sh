@@ -32,7 +32,7 @@ skip_upload=true     # Skip packing and uploading stages.
 ngpu=1               # The number of gpus ("0" uses cpu, otherwise use gpu).
 num_nodes=1          # The number of nodes.
 nj=60                # The number of parallel jobs.
-inference_nj=32      # The number of parallel jobs in decoding.
+inference_nj=60      # The number of parallel jobs in decoding.
 gpu_inference=false  # Whether to perform gpu decoding.
 dumpdir=dump         # Directory to dump features.
 expdir=exp           # Directory to save experiments.
@@ -43,7 +43,6 @@ local_data_opts= # The options given to local/data.sh.
 
 # Speed perturbation related
 speed_perturb_factors=  # perturbation factors, e.g. "0.9 1.0 1.1" (separated by space).
-noise_perturb=false     # whether to perturb training set with MUSAN noise
 
 # Feature extraction related
 feats_type=raw       # Feature type (raw or fbank_pitch).
@@ -145,9 +144,6 @@ Options:
 
     # Speed perturbation related
     --speed_perturb_factors # speed perturbation factors, e.g. "0.9 1.0 1.1" (separated by space, default="${speed_perturb_factors}").
-
-    # Noise perturbation related
-    --noise_perturb    # whether to perturb training set with MUSAN noise (default="${noise_perturb}").
 
     # Feature extraction related
     --feats_type       # Feature type (raw, fbank_pitch or extracted, default="${feats_type}").
@@ -328,9 +324,6 @@ if [ -z "${asr_tag}" ]; then
     if [ -n "${speed_perturb_factors}" ]; then
         asr_tag+="_sp"
     fi
-    if "${noise_perturb}"; then
-        asr_tag+="_noise_match"
-    fi
 fi
 if [ -z "${lm_tag}" ]; then
     if [ -n "${lm_config}" ]; then
@@ -364,9 +357,6 @@ if [ -z "${asr_stats_dir}" ]; then
     fi
     if [ -n "${speed_perturb_factors}" ]; then
         asr_stats_dir+="_sp"
-    fi
-    if "${noise_perturb}"; then
-        asr_stats_dir+="_noise_match"
     fi
 fi
 if [ -z "${lm_stats_dir}" ]; then
@@ -433,27 +423,6 @@ if ! "${skip_data_prep}"; then
 
     if [ -n "${speed_perturb_factors}" ]; then
         train_set="${train_set}_sp"
-    fi
-
-    if [ ${stage} -le 2 ] && [ ${stop_stage} -ge 2 ]; then
-        if "${noise_perturb}"; then
-            log "Stage 2: Noise perturbation: data/${train_set} -> data/${train_set}_noise_match"
-            scripts/utils/prepare_musan_data.sh
-            utils/data/get_reco2dur.sh --cmd "${train_cmd}" --nj ${nj} data/${train_set}
-            steps/data/augment_data_dir.py \
-                --utt-suffix "noise" \
-                --fg-interval 1 \
-                --fg-snrs "20:15:10:5" \
-                --fg-noise-dir "data/musan_noise_match" \
-                data/${train_set} \
-                data/${train_set}_noise_match
-        else
-            log "Skip stage 2: Noise Perturbation for Training Set"
-        fi
-    fi
-
-    if "${noise_perturb}"; then
-        train_set="${train_set}_noise_match"
     fi
 
     if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ]; then

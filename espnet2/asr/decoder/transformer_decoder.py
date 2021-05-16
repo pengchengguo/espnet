@@ -2,6 +2,8 @@
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
 """Decoder definition."""
+import logging
+
 from typing import Any
 from typing import List
 from typing import Sequence
@@ -66,18 +68,17 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         attention_dim = encoder_output_size
 
         if input_layer == "embed":
-            self.embed = torch.nn.Sequential(
-                torch.nn.Embedding(vocab_size, attention_dim),
-                pos_enc_class(attention_dim, positional_dropout_rate),
-            )
+            self.embed = torch.nn.Embedding(vocab_size, attention_dim)
+            self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         elif input_layer == "linear":
+            logging.warning("Can not use custom dropout mask.")
             self.embed = torch.nn.Sequential(
                 torch.nn.Linear(vocab_size, attention_dim),
                 torch.nn.LayerNorm(attention_dim),
                 torch.nn.Dropout(dropout_rate),
                 torch.nn.ReLU(),
-                pos_enc_class(attention_dim, positional_dropout_rate),
             )
+            self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         else:
             raise ValueError(f"only 'embed' or 'linear' is supported: {input_layer}")
 
@@ -98,6 +99,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         hlens: torch.Tensor,
         ys_in_pad: torch.Tensor,
         ys_in_lens: torch.Tensor,
+        init_dp: bool = True,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward decoder.
 
@@ -109,6 +111,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
                 if input_layer == "embed"
                 input tensor (batch, maxlen_out, #mels) in the other cases
             ys_in_lens: (batch)
+            init_dp: (bool): Init a new dropout mask or use the cached one
         Returns:
             (tuple): tuple containing:
 
@@ -128,9 +131,13 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         memory_mask = (~make_pad_mask(hlens))[:, None, :].to(memory.device)
 
         x = self.embed(tgt)
-        x, tgt_mask, memory, memory_mask = self.decoders(
-            x, tgt_mask, memory, memory_mask
-        )
+        x = self.pos_enc(x, init_dp=init_dp)
+
+        for dec in self.decoders:
+            x, tgt_mask, memory, memory_mask = dec(
+                x, tgt_mask, memory, memory_mask, init_dp=init_dp
+            )
+
         if self.normalize_before:
             x = self.after_norm(x)
         if self.output_layer is not None:

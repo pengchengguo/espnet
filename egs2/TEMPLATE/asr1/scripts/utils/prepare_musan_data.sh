@@ -11,7 +11,7 @@ log() {
 }
 
 help_message=$(cat << EOF
-Usage: $0
+Usage: $0 <musan-dir>
 
 EOF
 )
@@ -22,23 +22,16 @@ log "$0 $*"
 
 . ./utils/parse_options.sh
 
-. ./db.sh
 . ./path.sh
 . ./cmd.sh
 
 
-if [ $# -gt 1 ]; then
+if [ $# != 1 ]; then
     log "${help_message}"
     exit 2
 fi
 
-if [ -z "${MUSAN}" ]; then
-    log "Error: \$MUSAN is not set in db.sh."
-    exit 2
-fi
-
-# To absolute path
-MUSAN=$(cd ${MUSAN}; pwd)
+MUSAN=$1
 
 log "Data Preparation"
 # Prepare the MUSAN corpus, which consists of music, speech, and noise

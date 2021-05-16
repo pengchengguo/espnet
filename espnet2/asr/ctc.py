@@ -137,8 +137,6 @@ class CTC(torch.nn.Module):
                 self.dp_mask = torch.zeros_like(hs_pad).bernoulli_(
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
-
-            assert self.dp_mask is not None, "missing dropout mask, set init_dp = True"
             hs_pad = self.dp_mask * hs_pad
 
         # hs_pad: (B, L, NProj) -> ys_hat: (B, L, Nvocab)

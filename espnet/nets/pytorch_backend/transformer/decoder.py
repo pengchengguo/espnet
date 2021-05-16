@@ -143,6 +143,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
                     conv_wshare,
                     attention_dim,
                     self_attention_dropout_rate,
+                    int(conv_kernel_length.split("_")[lnum]),
                     True,
                     conv_usebias,
                 )
@@ -192,6 +193,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
                     conv_wshare,
                     attention_dim,
                     self_attention_dropout_rate,
+                    int(conv_kernel_length.split("_")[lnum]),
                     True,
                     conv_usebias,
                 )

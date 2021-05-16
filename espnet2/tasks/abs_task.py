@@ -256,6 +256,9 @@ class AbsTask(ABC):
     def build_model(cls, args: argparse.Namespace) -> AbsESPnetModel:
         raise NotImplementedError
 
+    def build_adversary(cls, args: argparse.Namespace) -> object:
+        raise NotImplementedError
+
     @classmethod
     def get_parser(cls) -> config_argparse.ArgumentParser:
         assert check_argument_types()
@@ -310,7 +313,7 @@ class AbsTask(ABC):
         group.add_argument(
             "--ngpu",
             type=int,
-            default=0,
+            default=1,
             help="The number of gpus. 0 indicates CPU mode",
         )
         group.add_argument("--seed", type=int, default=0, help="Random seed")
@@ -557,6 +560,13 @@ class AbsTask(ABC):
             type=str2bool,
             default=True,
             help="Enable tensorboard logging",
+        )
+        group.add_argument(
+            "--no_sync_dp",
+            type=str2bool,
+            default=True,
+            help="Do not synchronize the dropout mask when forwarding the same data"
+            "multiple times (mainly used for the adversarial training).",
         )
         group.add_argument(
             "--use_wandb",
@@ -1074,7 +1084,7 @@ class AbsTask(ABC):
             logging.info("Invoking torch.autograd.set_detect_anomaly(True)")
             torch.autograd.set_detect_anomaly(args.detect_anomaly)
 
-        # 2. Build model
+        # 2a Build model
         model = cls.build_model(args=args)
         if not isinstance(model, AbsESPnetModel):
             raise RuntimeError(
@@ -1089,6 +1099,12 @@ class AbsTask(ABC):
                 if k.startswith(t + ".") or k == t:
                     logging.info(f"Setting {k}.requires_grad = False")
                     p.requires_grad = False
+
+        # 2b (Optional) Build adversary
+        if getattr(args, f"adversary", None) is not None:
+            adversary = cls.build_adversary(args=args)
+        else:
+            adversary = None
 
         # 3. Build optimizer
         optimizers = cls.build_optimizers(args, model=model)
@@ -1258,6 +1274,7 @@ class AbsTask(ABC):
             trainer_options = cls.trainer.build_options(args)
             cls.trainer.run(
                 model=model,
+                adversary=adversary,
                 optimizers=optimizers,
                 schedulers=schedulers,
                 train_iter_factory=train_iter_factory,

@@ -134,6 +134,7 @@ class ConformerEncoder(AbsEncoder):
             raise ValueError("unknown pos_enc_layer: " + pos_enc_layer_type)
 
         if input_layer == "linear":
+            logging.warning("Can not use custom dropout mask.")
             self.embed = torch.nn.Sequential(
                 torch.nn.Linear(input_size, output_size),
                 torch.nn.LayerNorm(output_size),
@@ -162,11 +163,13 @@ class ConformerEncoder(AbsEncoder):
                 pos_enc_class(output_size, positional_dropout_rate),
             )
         elif input_layer == "embed":
+            logging.warning("Can not use custom dropout mask.")
             self.embed = torch.nn.Sequential(
                 torch.nn.Embedding(input_size, output_size, padding_idx=padding_idx),
                 pos_enc_class(output_size, positional_dropout_rate),
             )
         elif isinstance(input_layer, torch.nn.Module):
+            logging.warning("Can not use custom dropout mask.")
             self.embed = torch.nn.Sequential(
                 input_layer,
                 pos_enc_class(output_size, positional_dropout_rate),
@@ -262,6 +265,7 @@ class ConformerEncoder(AbsEncoder):
         xs_pad: torch.Tensor,
         ilens: torch.Tensor,
         prev_states: torch.Tensor = None,
+        init_dp: bool = True,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Calculate forward propagation.
 
@@ -269,6 +273,7 @@ class ConformerEncoder(AbsEncoder):
             xs_pad (torch.Tensor): Input tensor (#batch, L, input_size).
             ilens (torch.Tensor): Input length (#batch).
             prev_states (torch.Tensor): Not to be used now.
+            init_dp: (bool): Init a new dropout mask or use the cached one
 
         Returns:
             torch.Tensor: Output tensor (#batch, L, output_size).
@@ -291,10 +296,13 @@ class ConformerEncoder(AbsEncoder):
                     xs_pad.size(1),
                     limit_size,
                 )
-            xs_pad, masks = self.embed(xs_pad, masks)
+            xs_pad, masks = self.embed(xs_pad, masks, init_dp=init_dp)
         else:
-            xs_pad = self.embed(xs_pad)
-        xs_pad, masks = self.encoders(xs_pad, masks)
+            xs_pad = self.embed(xs_pad, init_dp=init_dp)
+
+        for enc in self.encoders:
+            xs_pad, masks = enc(xs_pad, masks, init_dp=init_dp)
+
         if isinstance(xs_pad, tuple):
             xs_pad = xs_pad[0]
         if self.normalize_before:

@@ -142,12 +142,12 @@ class ASRTask(AbsTask):
         normalize_choices,
         # --preencoder and --preencoder_conf
         preencoder_choices,
+        # --adversary and --adversary_conf
+        adversary_choices,
         # --encoder and --encoder_conf
         encoder_choices,
         # --decoder and --decoder_conf
         decoder_choices,
-        # --adversary and --adversary_conf
-        adversary_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -401,11 +401,11 @@ class ASRTask(AbsTask):
         else:
             preencoder = None
 
-        # 4. Encoder
+        # 6. Encoder
         encoder_class = encoder_choices.get_class(args.encoder)
         encoder = encoder_class(input_size=input_size, **args.encoder_conf)
 
-        # 5. Decoder
+        # 7. Decoder
         decoder_class = decoder_choices.get_class(args.decoder)
 
         decoder = decoder_class(
@@ -414,15 +414,15 @@ class ASRTask(AbsTask):
             **args.decoder_conf,
         )
 
-        # 6. CTC
+        # 8. CTC
         ctc = CTC(
             odim=vocab_size, encoder_output_sizse=encoder.output_size(), **args.ctc_conf
         )
 
-        # 7. RNN-T Decoder (Not implemented)
+        # 9. RNN-T Decoder (Not implemented)
         rnnt_decoder = None
 
-        # 8. Build model
+        # 10. Build model
         model = ESPnetASRModel(
             vocab_size=vocab_size,
             frontend=frontend,
@@ -444,3 +444,12 @@ class ASRTask(AbsTask):
 
         assert check_return_type(model)
         return model
+
+    @classmethod
+    def build_adversary(cls, args: argparse.Namespace) -> object:
+        assert check_argument_types()
+        adversary_class = adversary_choices.get_class(args.adversary)
+        adversary = adversary_class(**args.adversary_conf)
+
+        assert check_return_type(adversary)
+        return adversary

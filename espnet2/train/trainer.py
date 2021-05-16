@@ -81,6 +81,7 @@ class TrainerOptions:
     no_forward_run: bool
     use_tensorboard: bool
     use_wandb: bool
+    no_sync_dp: bool
     output_dir: Union[Path, str]
     max_epoch: int
     seed: int
@@ -163,6 +164,7 @@ class Trainer:
     def run(
         cls,
         model: AbsESPnetModel,
+        adversary: object,
         optimizers: Sequence[torch.optim.Optimizer],
         schedulers: Sequence[Optional[AbsScheduler]],
         train_iter_factory: AbsIterFactory,
@@ -283,6 +285,7 @@ class Trainer:
             with reporter.observe("train") as sub_reporter:
                 all_steps_are_invalid = cls.train_one_epoch(
                     model=dp_model,
+                    adversary=adversary,
                     optimizers=optimizers,
                     schedulers=schedulers,
                     iterator=train_iter_factory.build_iter(iepoch),
@@ -431,6 +434,7 @@ class Trainer:
     def train_one_epoch(
         cls,
         model: torch.nn.Module,
+        adversary: object,
         iterator: Iterable[Tuple[List[str], Dict[str, torch.Tensor]]],
         optimizers: Sequence[torch.optim.Optimizer],
         schedulers: Sequence[Optional[AbsScheduler]],
@@ -450,6 +454,7 @@ class Trainer:
         no_forward_run = options.no_forward_run
         ngpu = options.ngpu
         use_wandb = options.use_wandb
+        no_sync_dp = options.no_sync_dp
         distributed = distributed_option.distributed
 
         if log_interval is None:
@@ -482,7 +487,10 @@ class Trainer:
 
             with autocast(scaler is not None):
                 with reporter.measure_time("forward_time"):
-                    retval = model(**batch)
+                    if adversary is None:
+                        retval = model(**batch, no_sync_dp=True)
+                    else:
+                        raise NotImplementedError
 
                     # Note(kamo):
                     # Supporting two patterns for the returned value from the model
