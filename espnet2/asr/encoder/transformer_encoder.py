@@ -5,6 +5,7 @@
 from typing import Optional
 from typing import Tuple
 
+import logging
 import torch
 from typeguard import check_argument_types
 
@@ -75,6 +76,7 @@ class TransformerEncoder(AbsEncoder):
         self._output_size = output_size
 
         if input_layer == "linear":
+            logging.warning("Can not use custom dropout mask.")
             self.embed = torch.nn.Sequential(
                 torch.nn.Linear(input_size, output_size),
                 torch.nn.LayerNorm(output_size),
@@ -83,12 +85,19 @@ class TransformerEncoder(AbsEncoder):
                 pos_enc_class(output_size, positional_dropout_rate),
             )
         elif input_layer == "conv2d":
-            self.embed = Conv2dSubsampling(input_size, output_size, dropout_rate)
+            self.embed = Conv2dSubsampling(
+                input_size, output_size, positional_dropout_rate
+            )
         elif input_layer == "conv2d6":
-            self.embed = Conv2dSubsampling6(input_size, output_size, dropout_rate)
+            self.embed = Conv2dSubsampling6(
+                input_size, output_size, positional_dropout_rate
+            )
         elif input_layer == "conv2d8":
-            self.embed = Conv2dSubsampling8(input_size, output_size, dropout_rate)
+            self.embed = Conv2dSubsampling8(
+                input_size, output_size, positional_dropout_rate
+            )
         elif input_layer == "embed":
+            logging.warning("Can not use custom dropout mask.")
             self.embed = torch.nn.Sequential(
                 torch.nn.Embedding(input_size, output_size, padding_idx=padding_idx),
                 pos_enc_class(output_size, positional_dropout_rate),
@@ -149,6 +158,7 @@ class TransformerEncoder(AbsEncoder):
         xs_pad: torch.Tensor,
         ilens: torch.Tensor,
         prev_states: torch.Tensor = None,
+        init_dp: bool = True,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Embed positions in tensor.
 
@@ -156,6 +166,7 @@ class TransformerEncoder(AbsEncoder):
             xs_pad: input tensor (B, L, D)
             ilens: input length (B)
             prev_states: Not to be used now.
+            init_dp: Init a new dropout mask or use the cached one
         Returns:
             position embedded tensor and mask
         """
@@ -174,10 +185,13 @@ class TransformerEncoder(AbsEncoder):
                     xs_pad.size(1),
                     limit_size,
                 )
-            xs_pad, masks = self.embed(xs_pad, masks)
+            xs_pad, masks = self.embed(xs_pad, masks, init_dp=init_dp)
         else:
-            xs_pad = self.embed(xs_pad)
-        xs_pad, masks = self.encoders(xs_pad, masks)
+            xs_pad = self.embed(xs_pad, init_dp=init_dp)
+
+        for enc in self.encoders:
+            xs_pad, masks = enc(xs_pad, masks, init_dp=init_dp)
+
         if self.normalize_before:
             xs_pad = self.after_norm(xs_pad)
 

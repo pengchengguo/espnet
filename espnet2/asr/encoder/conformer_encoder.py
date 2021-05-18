@@ -273,7 +273,7 @@ class ConformerEncoder(AbsEncoder):
             xs_pad (torch.Tensor): Input tensor (#batch, L, input_size).
             ilens (torch.Tensor): Input length (#batch).
             prev_states (torch.Tensor): Not to be used now.
-            init_dp: (bool): Init a new dropout mask or use the cached one
+            init_dp (bool): Init a new dropout mask or use the cached one
 
         Returns:
             torch.Tensor: Output tensor (#batch, L, output_size).

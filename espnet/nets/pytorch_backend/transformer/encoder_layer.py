@@ -116,6 +116,7 @@ class EncoderLayer(nn.Module):
                     1 - self.dropout_rate
                 ) / (1 - self.dropout_rate)
             x = self.dp_mask_ff * x
+
         x = residual + x
 
         if not self.normalize_before:

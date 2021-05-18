@@ -106,7 +106,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             self.embed = torch.nn.Embedding(odim, attention_dim)
             self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         elif input_layer == "linear":
-            logging.warning("Can not use cached dropout mask.")
+            logging.warning("Can not use custom dropout mask.")
             self.embed = torch.nn.Sequential(
                 torch.nn.Linear(odim, attention_dim),
                 torch.nn.LayerNorm(attention_dim),
@@ -115,7 +115,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             )
             self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         elif isinstance(input_layer, torch.nn.Module):
-            logging.warning("Can not use cached dropout mask.")
+            logging.warning("Can not use custom dropout mask.")
             self.embed = input_layer
             self.pos_enc = pos_enc_class(attention_dim, positional_dropout_rate)
         else:
@@ -136,7 +136,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             ] * num_blocks
         elif selfattention_layer_type == "lightconv":
             logging.info("decoder self-attention layer type = lightweight convolution")
-            logging.warning("Can not use cached dropout mask.")
+            logging.warning("Can not use custom dropout mask.")
             decoder_selfattn_layer = LightweightConvolution
             decoder_selfattn_layer_args = [
                 (
@@ -154,7 +154,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
                 "decoder self-attention layer "
                 "type = lightweight convolution 2-dimentional"
             )
-            logging.warning("Can not use cached dropout mask.")
+            logging.warning("Can not use custom dropout mask.")
             decoder_selfattn_layer = LightweightConvolution2D
             decoder_selfattn_layer_args = [
                 (
@@ -169,7 +169,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             ]
         elif selfattention_layer_type == "dynamicconv":
             logging.info("decoder self-attention layer type = dynamic convolution")
-            logging.warning("Can not use cached dropout mask.")
+            logging.warning("Can not use custom dropout mask.")
             decoder_selfattn_layer = DynamicConvolution
             decoder_selfattn_layer_args = [
                 (
@@ -186,7 +186,7 @@ class Decoder(BatchScorerInterface, torch.nn.Module):
             logging.info(
                 "decoder self-attention layer type = dynamic convolution 2-dimentional"
             )
-            logging.warning("Can not use cached dropout mask.")
+            logging.warning("Can not use custom dropout mask.")
             decoder_selfattn_layer = DynamicConvolution2D
             decoder_selfattn_layer_args = [
                 (

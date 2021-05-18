@@ -142,9 +142,9 @@ class EncoderLayer(nn.Module):
                     self.dp_mask_attn = torch.zeros_like(x_att).bernoulli_(
                         1 - self.dropout_rate
                     ) / (1 - self.dropout_rate)
-                x = self.dp_mask_attn * x_att
+                x_att = self.dp_mask_attn * x_att
 
-            x = residual + x
+            x = residual + x_att
         if not self.normalize_before:
             x = self.norm_mha(x)
 

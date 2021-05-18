@@ -9,7 +9,6 @@
 import math
 
 import torch
-from torch.nn.functional import dropout
 
 
 def _pre_hook(

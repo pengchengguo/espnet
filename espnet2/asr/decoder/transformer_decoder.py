@@ -167,6 +167,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
             y.shape` is (batch, maxlen_out, token)
         """
         x = self.embed(tgt)
+        x = self.pos_enc(x)
         if cache is None:
             cache = [None] * len(self.decoders)
         new_cache = []
