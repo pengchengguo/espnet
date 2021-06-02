@@ -137,8 +137,10 @@ class CommonPreprocessor(AbsPreprocessor):
         non_linguistic_symbols: Union[Path, str, Iterable[str]] = None,
         delimiter: str = None,
         rir_scp: str = None,
+        rir_utt_prefix: str = None,
         rir_apply_prob: float = 1.0,
         noise_scp: str = None,
+        noise_utt_prefix: str = None,
         noise_apply_prob: float = 1.0,
         noise_db_range: str = "3_10",
         speech_volume_normalize: float = None,
@@ -184,8 +186,13 @@ class CommonPreprocessor(AbsPreprocessor):
                         self.rirs.append(sps[0])
                     else:
                         self.rirs.append(sps[1])
+            if rir_utt_prefix is not None:
+                self.rir_prefixes = rir_utt_prefix.split(",")
+            else:
+                self.rir_prefixes = None
         else:
             self.rirs = None
+            self.rir_prefixes = None
 
         if train and noise_scp is not None:
             self.noises = []
@@ -196,6 +203,10 @@ class CommonPreprocessor(AbsPreprocessor):
                         self.noises.append(sps[0])
                     else:
                         self.noises.append(sps[1])
+            if noise_utt_prefix is not None:
+                self.noise_prefixes = noise_utt_prefix.split(",")
+            else:
+                self.noise_prefixes = None
             sps = noise_db_range.split("_")
             if len(sps) == 1:
                 self.noise_db_low, self.noise_db_high = float(sps[0])
@@ -213,6 +224,15 @@ class CommonPreprocessor(AbsPreprocessor):
     ) -> Dict[str, np.ndarray]:
         assert check_argument_types()
 
+        def with_prefix(uid, prefixes):
+            if prefixes is None:
+                return True
+            else:
+                uid_prefix = uid.split("-")[0]
+                if uid_prefix in prefixes:
+                    return True
+                return False
+
         if self.speech_name in data:
             if self.train and self.rirs is not None and self.noises is not None:
                 speech = data[self.speech_name]
@@ -225,9 +245,12 @@ class CommonPreprocessor(AbsPreprocessor):
                     speech = speech.T
                 # Calc power on non shlence region
                 power = (speech[detect_non_silence(speech)] ** 2).mean()
-
                 # 1. Convolve RIR
-                if self.rirs is not None and self.rir_apply_prob >= np.random.random():
+                if (
+                    self.rirs is not None
+                    and with_prefix(uid, self.rir_prefixes)
+                    and self.rir_apply_prob >= np.random.random()
+                ):
                     rir_path = np.random.choice(self.rirs)
                     if rir_path is not None:
                         rir, _ = soundfile.read(
@@ -236,6 +259,10 @@ class CommonPreprocessor(AbsPreprocessor):
 
                         # rir: (Nmic, Time)
                         rir = rir.T
+
+                        # mono speech
+                        if speech.shape[0] == 1:
+                            rir = rir[0][None, :]
 
                         # speech: (Nmic, Time)
                         # Note that this operation doesn't change the signal length
@@ -249,6 +276,7 @@ class CommonPreprocessor(AbsPreprocessor):
                 # 2. Add Noise
                 if (
                     self.noises is not None
+                    and with_prefix(uid, self.noise_prefixes)
                     and self.noise_apply_prob >= np.random.random()
                 ):
                     noise_path = np.random.choice(self.noises)
@@ -280,6 +308,10 @@ class CommonPreprocessor(AbsPreprocessor):
                                     raise RuntimeError(f"Something wrong: {noise_path}")
                         # noise: (Nmic, Time)
                         noise = noise.T
+
+                        # mono speech
+                        if speech.shape[0] == 1:
+                            noise = noise[0][None, :]
 
                         noise_power = (noise ** 2).mean()
                         scale = (

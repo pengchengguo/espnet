@@ -310,7 +310,7 @@ class AbsTask(ABC):
         group.add_argument(
             "--ngpu",
             type=int,
-            default=0,
+            default=1,
             help="The number of gpus. 0 indicates CPU mode",
         )
         group.add_argument("--seed", type=int, default=0, help="Random seed")
@@ -1297,8 +1297,10 @@ class AbsTask(ABC):
             train = True
 
         elif mode == "valid":
-            preprocess_fn = cls.build_preprocess_fn(args, train=False)
-            collate_fn = cls.build_collate_fn(args, train=False)
+            preprocess_fn = cls.build_preprocess_fn(
+                args, train=args.use_preprocessor_valid
+            )
+            collate_fn = cls.build_collate_fn(args, train=args.use_preprocessor_valid)
             data_path_and_name_and_type = args.valid_data_path_and_name_and_type
             shape_files = args.valid_shape_file
 

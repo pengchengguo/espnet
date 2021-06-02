@@ -45,6 +45,10 @@ local_data_opts= # The options given to local/data.sh.
 # Speed perturbation related
 speed_perturb_factors=  # perturbation factors, e.g. "0.9 1.0 1.1" (separated by space).
 
+# Preprocess and DataLoader realted
+num_workers=1        # The number of DataLoader threads
+use_preprocessor_valid=false  # apply preprocessing to valid data or not
+
 # Feature extraction related
 feats_type=raw       # Feature type (raw or fbank_pitch).
 audio_format=flac    # Audio format: wav, flac, wav.ark, flac.ark  (only in feats_type=raw).
@@ -146,6 +150,10 @@ Options:
 
     # Speed perturbation related
     --speed_perturb_factors # speed perturbation factors, e.g. "0.9 1.0 1.1" (separated by space, default="${speed_perturb_factors}").
+
+    # Preprocess and DataLoader realted
+    --num_workers    # The number of DataLoader thread (default="${num_workers}").
+    --use_preprocessor_valid # apply preprocessing to valid data or not (default="${use_preprocessor_valid}").
 
     # Feature extraction related
     --feats_type       # Feature type (raw, fbank_pitch or extracted, default="${feats_type}").
@@ -1042,6 +1050,8 @@ if ! "${skip_train}"; then
             --multiprocessing_distributed true -- \
             ${python} -m espnet2.bin.asr_train \
                 --use_preprocessor true \
+                --use_preprocessor_valid "${use_preprocessor_valid}" \
+                --num_workers "${num_workers}" \
                 --bpemodel "${bpemodel}" \
                 --token_type "${token_type}" \
                 --token_list "${token_list}" \

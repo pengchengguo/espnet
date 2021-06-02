@@ -5,6 +5,8 @@ set -e
 set -u
 set -o pipefail
 
+ngpu=1
+
 train_set=train
 valid_set=dev
 test_sets="aishell4_test"
@@ -18,10 +20,13 @@ use_wordlm=false
 
 
 ./asr.sh                                               \
+    --ngpu ${ngpu}                                     \
     --lang zh                                          \
     --audio_format wav                                 \
     --feats_type raw                                   \
     --token_type char                                  \
+    --use_preprocessor_valid true                      \
+    --num_workers 8                                    \
     --use_lm ${use_lm}                                 \
     --use_word_lm ${use_wordlm}                        \
     --lm_config "${lm_config}"                         \

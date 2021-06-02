@@ -200,6 +200,12 @@ class ASRTask(AbsTask):
             help="Apply preprocessing to data or not",
         )
         group.add_argument(
+            "--use_preprocessor_valid",
+            type=str2bool,
+            default=False,
+            help="Apply preprocessing to valid data or not",
+        )
+        group.add_argument(
             "--token_type",
             type=str,
             default="bpe",
@@ -244,6 +250,12 @@ class ASRTask(AbsTask):
             help="The file path of rir scp file.",
         )
         parser.add_argument(
+            "--rir_utt_prefix",
+            type=str_or_none,
+            default=None,
+            help="Only do rir for utterances with the prefix in the list.",
+        )
+        parser.add_argument(
             "--rir_apply_prob",
             type=float,
             default=1.0,
@@ -254,6 +266,12 @@ class ASRTask(AbsTask):
             type=str_or_none,
             default=None,
             help="The file path of noise scp file.",
+        )
+        parser.add_argument(
+            "--noise_utt_prefix",
+            type=str_or_none,
+            default=None,
+            help="Only add noise for utterances with the prefix in the list.",
         )
         parser.add_argument(
             "--noise_apply_prob",
@@ -300,10 +318,16 @@ class ASRTask(AbsTask):
                 g2p_type=args.g2p,
                 # NOTE(kamo): Check attribute existence for backward compatibility
                 rir_scp=args.rir_scp if hasattr(args, "rir_scp") else None,
+                rir_utt_prefix=args.rir_utt_prefix
+                if hasattr(args, "rir_utt_prefix")
+                else None,
                 rir_apply_prob=args.rir_apply_prob
                 if hasattr(args, "rir_apply_prob")
                 else 1.0,
                 noise_scp=args.noise_scp if hasattr(args, "noise_scp") else None,
+                noise_utt_prefix=args.noise_utt_prefix
+                if hasattr(args, "noise_utt_prefix")
+                else None,
                 noise_apply_prob=args.noise_apply_prob
                 if hasattr(args, "noise_apply_prob")
                 else 1.0,
