@@ -73,25 +73,24 @@ def main(args):
     utt2textgrid = {}
     for line in textgrid_flist:
         path = Path(line.strip())
-        utt2textgrid[path.stem] = path
+        # the name of textgrid file is different between training and test set
+        if "train" in path.parts:
+            uttid = "%s_%s" % (path.parts[-2], path.stem)
+        else:
+            uttid = path.stem
+        utt2textgrid[uttid] = path
 
     # parse the textgrid file for each utterance
     all_segments = []
     for line in wav_scp:
         uttid = line.strip().split(" ")[0]
 
-        # the name of textgrid file is different between training and test set
-        if len(uttid.split("_")) == 3:
-            tg_file = uttid.split("_", 1)[1]
-        else:
-            tg_file = uttid
-
-        if tg_file not in utt2textgrid:
+        if uttid not in utt2textgrid:
             print("%s doesn't have transcription" % uttid)
             continue
 
         segments = []
-        tg = textgrid.TextGrid.fromFile(utt2textgrid[tg_file])
+        tg = textgrid.TextGrid.fromFile(utt2textgrid[uttid])
         for i in range(tg.__len__()):
             for j in range(tg[i].__len__()):
                 if tg[i][j].mark:
