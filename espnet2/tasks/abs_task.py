@@ -310,7 +310,7 @@ class AbsTask(ABC):
         group.add_argument(
             "--ngpu",
             type=int,
-            default=1,
+            default=0,
             help="The number of gpus. 0 indicates CPU mode",
         )
         group.add_argument("--seed", type=int, default=0, help="Random seed")
