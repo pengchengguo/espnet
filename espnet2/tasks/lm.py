@@ -95,6 +95,12 @@ class LMTask(AbsTask):
             help="Apply preprocessing to data or not",
         )
         group.add_argument(
+            "--use_preprocessor_valid",
+            type=str2bool,
+            default=False,
+            help="Apply preprocessing to valid data or not",
+        )
+        group.add_argument(
             "--token_type",
             type=str,
             default="bpe",

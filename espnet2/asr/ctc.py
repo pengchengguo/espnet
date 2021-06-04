@@ -68,9 +68,12 @@ class CTC(torch.nn.Module):
                         " Returning nan value instead of CTC loss"
                     )
                 elif size != th_pred.size(1):
+                    size2 = (th_olen > th_ilen).long().sum()
                     logging.warning(
-                        f"{th_pred.size(1) - size}/{th_pred.size(1)}"
+                        f"{th_pred.size(1) - size}/{th_pred.size(1) }"
                         " samples got nan grad."
+                        f"{size2}/{th_pred.size(1)}"
+                        " samples got nan grad caused by length problem"
                         " These were ignored for CTC loss."
                     )
 
