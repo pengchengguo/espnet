@@ -100,7 +100,7 @@ def get_parser():
         "--num-spkrs",
         type=int,
         default=1,
-        choices=[1, 2],
+        choices=[1, 2, 3],
         help="Number of speakers in the speech",
     )
     parser.add_argument(
@@ -350,7 +350,7 @@ def main(args):
                     recog(args)
         else:
             raise ValueError("Only chainer and pytorch are supported.")
-    elif args.num_spkrs == 2:
+    elif args.num_spkrs > 1:
         if args.backend == "pytorch":
             from espnet.asr.pytorch_backend.asr_mix import recog
 
