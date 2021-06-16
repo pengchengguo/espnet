@@ -463,7 +463,9 @@ class E2E(E2EASR, ASRInterface, torch.nn.Module):
         )
         return nbest_hyps
 
-    def recognize(self, x, recog_args, char_list=None, rnnlm=None, use_jit=False):
+    def recognize(
+        self, x, recog_args, char_list=None, rnnlm=None, use_jit=False, num_spkrs=2
+    ):
         """Recognize input speech of each speaker.
 
         :param ndnarray x: input acoustic feature (B, T, D) or (T, D)

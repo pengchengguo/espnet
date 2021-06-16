@@ -488,7 +488,7 @@ class E2E(ASRInterface, torch.nn.Module):
             logging.warning("loss (=%f) is not correct", loss_data)
         return self.loss
 
-    def recognize(self, x, recog_args, char_list, rnnlm=None):
+    def recognize(self, x, recog_args, char_list, rnnlm=None, num_spkrs=2):
         """E2E beam search.
 
         :param ndarray x: input acoustic feature (T, D)
