@@ -45,10 +45,6 @@ local_data_opts= # The options given to local/data.sh.
 # Speed perturbation related
 speed_perturb_factors=  # perturbation factors, e.g. "0.9 1.0 1.1" (separated by space).
 
-# Preprocess and DataLoader realted
-num_workers=1        # The number of DataLoader threads
-use_preprocessor_valid=false  # apply preprocessing to valid data or not
-
 # Feature extraction related
 feats_type=raw       # Feature type (raw or fbank_pitch).
 audio_format=flac    # Audio format: wav, flac, wav.ark, flac.ark  (only in feats_type=raw).
@@ -98,7 +94,7 @@ inference_config= # Config for decoding.
 inference_args=   # Arguments for decoding, e.g., "--lm_weight 0.1".
                   # Note that it will overwrite args in inference config.
 inference_lm=valid.loss.ave.pth       # Language modle path for decoding.
-inference_asr_model=valid.acc.best.pth # ASR model path for decoding.
+inference_asr_model=valid.acc.ave.pth # ASR model path for decoding.
                                       # e.g.
                                       # inference_asr_model=train.loss.best.pth
                                       # inference_asr_model=3epoch.pth
@@ -150,10 +146,6 @@ Options:
 
     # Speed perturbation related
     --speed_perturb_factors # speed perturbation factors, e.g. "0.9 1.0 1.1" (separated by space, default="${speed_perturb_factors}").
-
-    # Preprocess and DataLoader realted
-    --num_workers    # The number of DataLoader thread (default="${num_workers}").
-    --use_preprocessor_valid # apply preprocessing to valid data or not (default="${use_preprocessor_valid}").
 
     # Feature extraction related
     --feats_type       # Feature type (raw, fbank_pitch or extracted, default="${feats_type}").
@@ -1049,9 +1041,8 @@ if ! "${skip_train}"; then
             --init_file_prefix "${asr_exp}"/.dist_init_ \
             --multiprocessing_distributed true -- \
             ${python} -m espnet2.bin.asr_train \
+                --ngpu ${ngpu}          \
                 --use_preprocessor true \
-                --use_preprocessor_valid "${use_preprocessor_valid}" \
-                --num_workers "${num_workers}" \
                 --bpemodel "${bpemodel}" \
                 --token_type "${token_type}" \
                 --token_list "${token_list}" \

@@ -25,8 +25,6 @@ use_wordlm=false
     --audio_format wav                                 \
     --feats_type raw                                   \
     --token_type char                                  \
-    --use_preprocessor_valid true                      \
-    --num_workers 8                                    \
     --use_lm ${use_lm}                                 \
     --use_word_lm ${use_wordlm}                        \
     --lm_config "${lm_config}"                         \
