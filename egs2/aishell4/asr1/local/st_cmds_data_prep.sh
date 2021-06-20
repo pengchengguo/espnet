@@ -78,7 +78,7 @@ cat $dir/utt.list | awk '{print substr($1,9,7)}' > $dir/spk.list
 paste -d' ' $dir/utt.list $dir/spk.list > $dir/utt2spk
 utils/utt2spk_to_spk2utt.pl $dir/utt2spk > $dir/spk2utt
 
-local/copy_data_dir.sh --utt-prefix st_cmd- --spk-prefix st_cmd- \
+utils/copy_data_dir.sh --utt-prefix st_cmd- --spk-prefix st_cmd- \
   $dir data/st_cmd
 
 # remove space in text

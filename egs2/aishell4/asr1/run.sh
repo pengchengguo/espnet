@@ -11,7 +11,7 @@ train_set=train
 valid_set=dev
 test_sets="aishell4_test"
 
-asr_config=conf/conference/train_asr_conformer.yaml
+asr_config=conf/train_asr_conformer.yaml
 inference_config=conf/decode_asr_rnn.yaml
 
 lm_config=conf/train_lm_transformer.yaml

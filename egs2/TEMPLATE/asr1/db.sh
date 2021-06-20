@@ -1,7 +1,10 @@
 # Set the path of your corpus
 # "downloads" means the corpus can be downloaded by the recipe automatically
 
-AISHELL=downloads
+ST_CMD="/home/backup_nfs4/pcguo/corpora/ST-CMDS-20170001_1-OS"
+AIDATATANG="/home/backup_nfs2/pcguo/corpora/aidatatang_200zh"
+AISHELL="/home/backup_nfs2/pcguo/corpora/aishell"
+AISHELL4="/home/backup_nfs4/pcguo/corpora/aishell4"
 AN4=downloads
 DIRHA_ENGLISH_PHDEV=
 DIRHA_WSJ=

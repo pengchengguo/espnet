@@ -100,9 +100,9 @@ utils/filter_scp.pl -f 1 $test_dir/text $test_dir/utt2spk_all | sort -u > $test_
 utils/utt2spk_to_spk2utt.pl $test_dir/utt2spk > $test_dir/spk2utt
 utils/filter_scp.pl -f 1 $test_dir/text $test_dir/segments_all | sort -u > $test_dir/segments
 
-local/copy_data_dir.sh --utt-prefix aishell4- --spk-prefix aishell4- \
+utils/copy_data_dir.sh --utt-prefix aishell4- --spk-prefix aishell4- \
   $train_dir data/aishell4_train
-local/copy_data_dir.sh --utt-prefix aishell4- --spk-prefix aishell4- \
+utils/copy_data_dir.sh --utt-prefix aishell4- --spk-prefix aishell4- \
   $test_dir data/aishell4_test
 
 # remove space in text

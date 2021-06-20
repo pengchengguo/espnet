@@ -81,11 +81,11 @@ for dir in $train_dir $dev_dir $test_dir; do
   utils/utt2spk_to_spk2utt.pl $dir/utt2spk > $dir/spk2utt
 done
 
-local/copy_data_dir.sh --utt-prefix aishell- --spk-prefix aishell- \
+utils/copy_data_dir.sh --utt-prefix aishell- --spk-prefix aishell- \
   $train_dir data/aishell_train
-local/copy_data_dir.sh --utt-prefix aishell- --spk-prefix aishell- \
+utils/copy_data_dir.sh --utt-prefix aishell- --spk-prefix aishell- \
   $dev_dir data/aishell_dev
-local/copy_data_dir.sh --utt-prefix aishell- --spk-prefix aishell- \
+utils/copy_data_dir.sh --utt-prefix aishell- --spk-prefix aishell- \
   $test_dir data/aishell_test
 
 # remove space in text

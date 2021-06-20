@@ -81,11 +81,11 @@ for dir in $train_dir $dev_dir $test_dir; do
   utils/utt2spk_to_spk2utt.pl $dir/utt2spk > $dir/spk2utt
 done
 
-local/copy_data_dir.sh --utt-prefix aidatatang- --spk-prefix aidatatang- \
+utils/copy_data_dir.sh --utt-prefix aidatatang- --spk-prefix aidatatang- \
   $train_dir data/aidatatang_train
-local/copy_data_dir.sh --utt-prefix aidatatang- --spk-prefix aidatatang- \
+utils/copy_data_dir.sh --utt-prefix aidatatang- --spk-prefix aidatatang- \
   $dev_dir data/aidatatang_dev
-local/copy_data_dir.sh --utt-prefix aidatatang- --spk-prefix aidatatang- \
+utils/copy_data_dir.sh --utt-prefix aidatatang- --spk-prefix aidatatang- \
   $test_dir data/aidatatang_test
 
 # remove space in text
