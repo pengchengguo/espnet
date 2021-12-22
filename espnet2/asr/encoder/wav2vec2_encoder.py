@@ -39,28 +39,60 @@ class FairSeqWav2Vec2Encoder(AbsEncoder):
         output_size: int = 256,
         normalize_before: bool = False,
         freeze_finetune_updates: int = 0,
+        dropout_rate: float = 0.0,
+        activation_dropout: float = 0.1,
+        attention_dropout: float = 0.0,
+        mask_length: int = 10,
+        mask_prob: float = 0.65,
+        mask_selection: str = "static",
+        mask_other: int = 0,
+        apply_mask: bool = True,
+        mask_channel_length: int = 64,
+        mask_channel_prob: float = 0.5,
+        mask_channel_other: int = 0,
+        mask_channel_selection: str = "static",
+        layerdrop: float = 0.1,
+        feature_grad_mult: float = 0.0,
     ):
         assert check_argument_types()
         super().__init__()
 
-        if w2v_url != "":
-            try:
-                import fairseq
-                from fairseq.models.wav2vec.wav2vec2 import Wav2Vec2Model
-            except Exception as e:
-                print("Error: FairSeq is not properly installed.")
-                print(
-                    "Please install FairSeq: cd ${MAIN_ROOT}/tools && make fairseq.done"
-                )
-                raise e
+        self.apply_mask = apply_mask
+        try:
+            import fairseq
+            from fairseq.models.wav2vec.wav2vec2 import Wav2Vec2Model
+        except Exception as e:
+            print("Error: FairSeq is not properly installed.")
+            print("Please install FairSeq: cd ${MAIN_ROOT}/tools && make fairseq.done")
+            raise e
 
-        self.w2v_model_path = download_w2v(w2v_url, w2v_dir_path)
+        arg_overrides = {
+            "dropout": dropout_rate,
+            "activation_dropout": activation_dropout,
+            "attention_dropout": attention_dropout,
+            "mask_length": mask_length,
+            "mask_prob": mask_prob,
+            "mask_selection": mask_selection,
+            "mask_other": mask_other,
+            "mask_channel_length": mask_channel_length,
+            "mask_channel_prob": mask_channel_prob,
+            "mask_channel_selection": mask_channel_selection,
+            "mask_channel_other": mask_channel_other,
+            "encoder_layerdrop": layerdrop,
+            "feature_grad_mult": feature_grad_mult,
+            "data": w2v_dir_path,
+        }
+
+        if w2v_url == "local":
+            self.w2v_model_path = w2v_dir_path
+        else:
+            # download the model
+            self.w2v_model_path = download_w2v(w2v_url, w2v_dir_path)
 
         self._output_size = output_size
 
         models, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
-            [self.w2v_model_path],
-            arg_overrides={"data": w2v_dir_path},
+            [self.w2v_model_path], arg_overrides=arg_overrides,
         )
         model = models[0]
 
@@ -121,11 +153,7 @@ class FairSeqWav2Vec2Encoder(AbsEncoder):
             logging.info("Start fine-tuning wav2vec parameters!")
 
         with torch.no_grad() if not ft else contextlib.nullcontext():
-            enc_outputs = self.encoders(
-                xs_pad,
-                masks,
-                features_only=True,
-            )
+            enc_outputs = self.encoders(xs_pad, masks, features_only=True,)
 
         xs_pad = enc_outputs["x"]  # (B,T,C),
         bs = xs_pad.shape[0]
