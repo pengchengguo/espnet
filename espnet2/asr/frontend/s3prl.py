@@ -24,6 +24,7 @@ def base_s3prl_setup(args):
     args.init_ckpt = getattr(args, "init_ckpt", None)
     args.verbose = getattr(args, "verbose", False)
     args.tile_factor = getattr(args, "tile_factor", 1)
+    args.old_fairseq = getattr(args, "old_fairseq", False)
     return args
 
 
@@ -36,6 +37,7 @@ class S3prlFrontend(AbsFrontend):
         frontend_conf: Optional[dict] = get_default_kwargs(Frontend),
         download_dir: str = None,
         multilayer_feature: bool = False,
+        ignore_global_token: bool = False,
     ):
         assert check_argument_types()
         super().__init__()
@@ -46,6 +48,7 @@ class S3prlFrontend(AbsFrontend):
             torch.hub.set_dir(download_dir)
 
         self.multilayer_feature = multilayer_feature
+        self.ignore_global_token = ignore_global_token
         self.upstream, self.featurizer = self._get_upstream(frontend_conf)
         if getattr(
             self.upstream, "model", None
@@ -59,9 +62,7 @@ class S3prlFrontend(AbsFrontend):
 
     def _get_upstream(self, frontend_conf):
         """Get S3PRL upstream model."""
-        s3prl_args = base_s3prl_setup(
-            Namespace(**frontend_conf, device="cpu"),
-        )
+        s3prl_args = base_s3prl_setup(Namespace(**frontend_conf, device="cpu"),)
         self.args = s3prl_args
 
         s3prl_path = None
@@ -78,6 +79,7 @@ class S3prlFrontend(AbsFrontend):
             ckpt=s3prl_args.upstream_ckpt,
             model_config=s3prl_args.upstream_model_config,
             refresh=s3prl_args.upstream_refresh,
+            old_fairseq=s3prl_args.old_fairseq,
             source="local",
         ).to("cpu")
 
@@ -91,6 +93,7 @@ class S3prlFrontend(AbsFrontend):
             upstream=s3prl_upstream,
             feature_selection=feature_selection,
             upstream_device="cpu",
+            ignore_global_token=self.ignore_global_token,
         )
 
         return s3prl_upstream, s3prl_featurizer
