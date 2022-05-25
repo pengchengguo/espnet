@@ -135,7 +135,10 @@ class BatchBeamSearch(BeamSearch):
         )
 
     def score_full(
-        self, hyp: BatchHypothesis, x: torch.Tensor
+        self,
+        hyp: BatchHypothesis,
+        x: torch.Tensor,
+        enc_inter_outs: List[torch.Tensor] = None,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """Score new hypothesis by `self.full_scorers`.
 
@@ -154,7 +157,12 @@ class BatchBeamSearch(BeamSearch):
         scores = dict()
         states = dict()
         for k, d in self.full_scorers.items():
-            scores[k], states[k] = d.batch_score(hyp.yseq, hyp.states[k], x)
+            if k == "decoder":
+                scores[k], states[k] = d.batch_score(
+                    hyp.yseq, hyp.states[k], x, enc_inter_outs=enc_inter_outs
+                )
+            else:
+                scores[k], states[k] = d.batch_score(hyp.yseq, hyp.states[k], x)
         return scores, states
 
     def score_partial(
@@ -204,7 +212,12 @@ class BatchBeamSearch(BeamSearch):
             new_states[k] = v
         return new_states
 
-    def search(self, running_hyps: BatchHypothesis, x: torch.Tensor) -> BatchHypothesis:
+    def search(
+        self,
+        running_hyps: BatchHypothesis,
+        x: torch.Tensor,
+        enc_inter_outs: List[torch.Tensor] = None,
+    ) -> BatchHypothesis:
         """Search new tokens for running hypotheses and encoded speech x.
 
         Args:
@@ -221,7 +234,13 @@ class BatchBeamSearch(BeamSearch):
         weighted_scores = torch.zeros(
             n_batch, self.n_vocab, dtype=x.dtype, device=x.device
         )
-        scores, states = self.score_full(running_hyps, x.expand(n_batch, *x.shape))
+        if enc_inter_outs is not None:
+            enc_inter_outs = [
+                inter.expand(n_batch, *inter.shape) for inter in enc_inter_outs
+            ]
+        scores, states = self.score_full(
+            running_hyps, x.expand(n_batch, *x.shape), enc_inter_outs=enc_inter_outs
+        )
         for k in self.full_scorers:
             weighted_scores += self.weights[k] * scores[k]
         # partial scoring

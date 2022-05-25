@@ -334,7 +334,11 @@ class BeamSearch(torch.nn.Module):
         return best_hyps
 
     def forward(
-        self, x: torch.Tensor, maxlenratio: float = 0.0, minlenratio: float = 0.0
+        self,
+        x: torch.Tensor,
+        maxlenratio: float = 0.0,
+        minlenratio: float = 0.0,
+        enc_inter_outs: List[torch.Tensor] = None,
     ) -> List[Hypothesis]:
         """Perform beam search.
 
@@ -368,7 +372,7 @@ class BeamSearch(torch.nn.Module):
         ended_hyps = []
         for i in range(maxlen):
             logging.debug("position " + str(i))
-            best = self.search(running_hyps, x)
+            best = self.search(running_hyps, x, enc_inter_outs=enc_inter_outs)
             # post process of one iteration
             running_hyps = self.post_process(i, maxlen, maxlenratio, best, ended_hyps)
             # end detection

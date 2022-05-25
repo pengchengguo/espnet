@@ -95,7 +95,7 @@ class ConformerEncoder(AbsEncoder):
         concat_after: bool = False,
         positionwise_layer_type: str = "linear",
         positionwise_conv_kernel_size: int = 3,
-        macaron_style: bool = False,
+        macaron_style: bool = True,
         rel_pos_type: str = "legacy",
         pos_enc_layer_type: str = "rel_pos",
         selfattention_layer_type: str = "rel_selfattn",
@@ -107,6 +107,8 @@ class ConformerEncoder(AbsEncoder):
         interctc_layer_idx: List[int] = [],
         interctc_use_conditioning: bool = False,
         stochastic_depth_rate: Union[float, List[float]] = 0.0,
+        transparent_attention: bool = False,
+        ta_source_embedding: bool = False,
     ):
         assert check_argument_types()
         super().__init__()
@@ -182,8 +184,7 @@ class ConformerEncoder(AbsEncoder):
             )
         elif isinstance(input_layer, torch.nn.Module):
             self.embed = torch.nn.Sequential(
-                input_layer,
-                pos_enc_class(output_size, positional_dropout_rate),
+                input_layer, pos_enc_class(output_size, positional_dropout_rate),
             )
         elif input_layer is None:
             self.embed = torch.nn.Sequential(
@@ -284,6 +285,15 @@ class ConformerEncoder(AbsEncoder):
         self.interctc_use_conditioning = interctc_use_conditioning
         self.conditioning_layer = None
 
+        # args for transparent attention as proposed in https://arxiv.org/abs/1808.07561
+        self.transparent_attention = transparent_attention
+        self.ta_source_embedding = ta_source_embedding
+        if self.transparent_attention:
+            # TODO: add tranparent attention FFN
+            if not self.normalize_before and self.ta_source_embedding:
+                # add an additional norm for the embed
+                self.srcemb_norm = LayerNorm(output_size)
+
     def output_size(self) -> int:
         return self._output_size
 
@@ -328,9 +338,8 @@ class ConformerEncoder(AbsEncoder):
             xs_pad = self.embed(xs_pad)
 
         intermediate_outs = []
-        if len(self.interctc_layer_idx) == 0:
-            xs_pad, masks = self.encoders(xs_pad, masks)
-        else:
+        if len(self.interctc_layer_idx) > 0:
+            # use intermediate ctc loss
             for layer_idx, encoder_layer in enumerate(self.encoders):
                 xs_pad, masks = encoder_layer(xs_pad, masks)
 
@@ -354,6 +363,23 @@ class ConformerEncoder(AbsEncoder):
                             xs_pad = (x, pos_emb)
                         else:
                             xs_pad = xs_pad + self.conditioning_layer(ctc_out)
+        elif self.transparent_attention:
+            # do transparent attention, return hidden states of all encoder layers
+            src_emb = xs_pad[0] if isinstance(xs_pad, tuple) else xs_pad
+            if self.ta_source_embedding:
+                if self.normalize_before:
+                    src_emb = self.after_norm(src_emb)
+                intermediate_outs.append(src_emb)
+
+            for layer_idx, encoder_layer in enumerate(self.encoders):
+                xs_pad, masks = encoder_layer(xs_pad, masks)
+                encoder_out = xs_pad[0] if isinstance(xs_pad, tuple) else xs_pad
+                if self.normalize_before:
+                    encoder_out = self.after_norm(encoder_out)
+                intermediate_outs.append(encoder_out)
+        else:
+            # do normal encoder process
+            xs_pad, masks = self.encoders(xs_pad, masks)
 
         if isinstance(xs_pad, tuple):
             xs_pad = xs_pad[0]

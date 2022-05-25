@@ -8,6 +8,7 @@ from typing import Tuple
 from typing import Union
 
 import torch
+import torch.nn.functional as F
 from typeguard import check_argument_types
 
 from espnet.nets.e2e_asr_common import ErrorCalculator
@@ -105,8 +106,7 @@ class ESPnetASRModel(AbsESPnetModel):
             self.joint_network = joint_network
 
             self.criterion_transducer = RNNTLoss(
-                blank=self.blank_id,
-                fastemit_lambda=0.0,
+                blank=self.blank_id, fastemit_lambda=0.0,
             )
 
             if report_cer or report_wer:
@@ -237,11 +237,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 loss_transducer,
                 cer_transducer,
                 wer_transducer,
-            ) = self._calc_transducer_loss(
-                encoder_out,
-                encoder_out_lens,
-                text,
-            )
+            ) = self._calc_transducer_loss(encoder_out, encoder_out_lens, text,)
 
             if loss_ctc is not None:
                 loss = loss_transducer + (self.ctc_weight * loss_ctc)
@@ -259,7 +255,11 @@ class ESPnetASRModel(AbsESPnetModel):
             # 2b. Attention decoder branch
             if self.ctc_weight != 1.0:
                 loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-                    encoder_out, encoder_out_lens, text, text_lengths
+                    encoder_out,
+                    encoder_out_lens,
+                    text,
+                    text_lengths,
+                    intermediate_outs,
                 )
 
             # 3. CTC-Att loss definition
@@ -275,6 +275,15 @@ class ESPnetASRModel(AbsESPnetModel):
             stats["acc"] = acc_att
             stats["cer"] = cer_att
             stats["wer"] = wer_att
+
+            # if self.encoder.transparent_attention:
+            #     # collect all weights
+            #     # (num_decoder, num_encoder)
+            #     ta_weights = self.decoder.ta_weights.detach()
+            #     ta_weights = F.softmax(ta_weights, dim=-1)
+            #     for i in range(ta_weights.shape[0]):
+            #         for j in range(ta_weights.shape[1]):
+            #             stats["Dec{}-Enc{}".format(i + 1, j)] = ta_weights[i][j]
 
         # Collect total loss stats
         stats["loss"] = loss.detach()
@@ -472,13 +481,18 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
+        intermediate_outs: List[torch.Tensor] = None,
     ):
         ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
         ys_in_lens = ys_pad_lens + 1
 
         # 1. Forward decoder
         decoder_out, _ = self.decoder(
-            encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens
+            encoder_out,
+            encoder_out_lens,
+            ys_in_pad,
+            ys_in_lens,
+            enc_inter_outs=intermediate_outs,
         )
 
         # 2. Compute attention loss
@@ -535,10 +549,7 @@ class ESPnetASRModel(AbsESPnetModel):
 
         """
         decoder_in, target, t_len, u_len = get_transducer_task_io(
-            labels,
-            encoder_out_lens,
-            ignore_id=self.ignore_id,
-            blank_id=self.blank_id,
+            labels, encoder_out_lens, ignore_id=self.ignore_id, blank_id=self.blank_id,
         )
 
         self.decoder.set_device(encoder_out.device)
@@ -548,12 +559,7 @@ class ESPnetASRModel(AbsESPnetModel):
             encoder_out.unsqueeze(2), decoder_out.unsqueeze(1)
         )
 
-        loss_transducer = self.criterion_transducer(
-            joint_out,
-            target,
-            t_len,
-            u_len,
-        )
+        loss_transducer = self.criterion_transducer(joint_out, target, t_len, u_len,)
 
         cer_transducer, wer_transducer = None, None
         if not self.training and self.error_calculator_trans is not None:

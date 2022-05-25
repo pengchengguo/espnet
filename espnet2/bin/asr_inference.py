@@ -31,7 +31,8 @@ from espnet2.asr.transducer.beam_search_transducer import (
 from espnet2.asr.transducer.beam_search_transducer import Hypothesis as TransHypothesis
 from espnet2.fileio.datadir_writer import DatadirWriter
 from espnet2.tasks.asr import ASRTask
-from espnet2.tasks.enh_s2t import EnhS2TTask
+
+# from espnet2.tasks.enh_s2t import EnhS2TTask
 from espnet2.tasks.lm import LMTask
 from espnet2.text.build_tokenizer import build_tokenizer
 from espnet2.text.token_id_converter import TokenIDConverter
@@ -82,7 +83,8 @@ class Speech2Text:
     ):
         assert check_argument_types()
 
-        task = ASRTask if not enh_s2t_task else EnhS2TTask
+        task = ASRTask
+        # task = ASRTask if not enh_s2t_task else EnhS2TTask
 
         # 1. Build ASR model
         scorers = {}
@@ -108,9 +110,7 @@ class Speech2Text:
         ctc = CTCPrefixScorer(ctc=asr_model.ctc, eos=asr_model.eos)
         token_list = asr_model.token_list
         scorers.update(
-            decoder=decoder,
-            ctc=ctc,
-            length_bonus=LengthBonus(len(token_list)),
+            decoder=decoder, ctc=ctc, length_bonus=LengthBonus(len(token_list)),
         )
 
         # 2. Build Language model
@@ -262,16 +262,32 @@ class Speech2Text:
 
         # b. Forward Encoder
         enc, _ = self.asr_model.encode(**batch)
+        transparent_attention = getattr(
+            self.asr_model.encoder, "transparent_attention", None
+        )
         if isinstance(enc, tuple):
+            # for transparent attention
+            inters = enc[1] if transparent_attention else None
             enc = enc[0]
+        else:
+            inters = None
         assert len(enc) == 1, len(enc)
 
         # c. Passed the encoder result and the beam search
         if self.beam_search_transducer:
             nbest_hyps = self.beam_search_transducer(enc[0])
         else:
+            if inters is not None:
+                # for transparent attention, remove the batch dim
+                # since it equals to 1
+                enc_inter_outs = [i[0] for i in inters]
+            else:
+                enc_inter_outs = None
             nbest_hyps = self.beam_search(
-                x=enc[0], maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
+                x=enc[0],
+                maxlenratio=self.maxlenratio,
+                minlenratio=self.minlenratio,
+                enc_inter_outs=enc_inter_outs,
             )
 
         nbest_hyps = nbest_hyps[: self.nbest]
@@ -304,8 +320,7 @@ class Speech2Text:
 
     @staticmethod
     def from_pretrained(
-        model_tag: Optional[str] = None,
-        **kwargs: Optional[Any],
+        model_tag: Optional[str] = None, **kwargs: Optional[Any],
     ):
         """Build Speech2Text instance from the pretrained model.
 
@@ -411,8 +426,7 @@ def inference(
         enh_s2t_task=enh_s2t_task,
     )
     speech2text = Speech2Text.from_pretrained(
-        model_tag=model_tag,
-        **speech2text_kwargs,
+        model_tag=model_tag, **speech2text_kwargs,
     )
 
     # 3. Build data-iterator
@@ -479,10 +493,7 @@ def get_parser():
 
     parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument(
-        "--ngpu",
-        type=int,
-        default=0,
-        help="The number of gpus. 0 indicates CPU mode",
+        "--ngpu", type=int, default=0, help="The number of gpus. 0 indicates CPU mode",
     )
     parser.add_argument("--seed", type=int, default=0, help="Random seed")
     parser.add_argument(
@@ -510,39 +521,25 @@ def get_parser():
 
     group = parser.add_argument_group("The model configuration related")
     group.add_argument(
-        "--asr_train_config",
-        type=str,
-        help="ASR training configuration",
+        "--asr_train_config", type=str, help="ASR training configuration",
     )
     group.add_argument(
-        "--asr_model_file",
-        type=str,
-        help="ASR model parameter file",
+        "--asr_model_file", type=str, help="ASR model parameter file",
     )
     group.add_argument(
-        "--lm_train_config",
-        type=str,
-        help="LM training configuration",
+        "--lm_train_config", type=str, help="LM training configuration",
     )
     group.add_argument(
-        "--lm_file",
-        type=str,
-        help="LM parameter file",
+        "--lm_file", type=str, help="LM parameter file",
     )
     group.add_argument(
-        "--word_lm_train_config",
-        type=str,
-        help="Word LM training configuration",
+        "--word_lm_train_config", type=str, help="Word LM training configuration",
     )
     group.add_argument(
-        "--word_lm_file",
-        type=str,
-        help="Word LM parameter file",
+        "--word_lm_file", type=str, help="Word LM parameter file",
     )
     group.add_argument(
-        "--ngram_file",
-        type=str,
-        help="N-gram parameter file",
+        "--ngram_file", type=str, help="N-gram parameter file",
     )
     group.add_argument(
         "--model_tag",
@@ -559,10 +556,7 @@ def get_parser():
 
     group = parser.add_argument_group("Beam-search related")
     group.add_argument(
-        "--batch_size",
-        type=int,
-        default=1,
-        help="The batch size for inference",
+        "--batch_size", type=int, default=1, help="The batch size for inference",
     )
     group.add_argument("--nbest", type=int, default=1, help="Output N-best hypotheses")
     group.add_argument("--beam_size", type=int, default=20, help="Beam size")
@@ -585,10 +579,7 @@ def get_parser():
         help="Input length ratio to obtain min output length",
     )
     group.add_argument(
-        "--ctc_weight",
-        type=float,
-        default=0.5,
-        help="CTC weight in joint decoding",
+        "--ctc_weight", type=float, default=0.5, help="CTC weight in joint decoding",
     )
     group.add_argument("--lm_weight", type=float, default=1.0, help="RNNLM weight")
     group.add_argument("--ngram_weight", type=float, default=0.9, help="ngram weight")
