@@ -339,30 +339,60 @@ class ConformerEncoder(AbsEncoder):
 
         intermediate_outs = []
         if len(self.interctc_layer_idx) > 0:
-            # use intermediate ctc loss
-            for layer_idx, encoder_layer in enumerate(self.encoders):
-                xs_pad, masks = encoder_layer(xs_pad, masks)
+            if not isinstance(self.after_norm, torch.nn.ModuleList):
+                # normal intermediate CTC
+                for layer_idx, encoder_layer in enumerate(self.encoders):
+                    xs_pad, masks = encoder_layer(xs_pad, masks)
 
-                if layer_idx + 1 in self.interctc_layer_idx:
-                    encoder_out = xs_pad
-                    if isinstance(encoder_out, tuple):
-                        encoder_out = encoder_out[0]
+                    if layer_idx + 1 in self.interctc_layer_idx:
+                        encoder_out = xs_pad
+                        if isinstance(encoder_out, tuple):
+                            encoder_out = encoder_out[0]
 
-                    # intermediate outputs are also normalized
-                    if self.normalize_before:
-                        encoder_out = self.after_norm(encoder_out)
+                        # intermediate outputs are also normalized
+                        if self.normalize_before:
+                            encoder_out = self.after_norm(encoder_out)
 
-                    intermediate_outs.append((layer_idx + 1, encoder_out))
+                        intermediate_outs.append((layer_idx + 1, encoder_out))
 
-                    if self.interctc_use_conditioning:
-                        ctc_out = ctc.softmax(encoder_out)
+                        if self.interctc_use_conditioning:
+                            ctc_out = ctc.softmax(encoder_out)
 
-                        if isinstance(xs_pad, tuple):
-                            x, pos_emb = xs_pad
-                            x = x + self.conditioning_layer(ctc_out)
-                            xs_pad = (x, pos_emb)
-                        else:
-                            xs_pad = xs_pad + self.conditioning_layer(ctc_out)
+                            if isinstance(xs_pad, tuple):
+                                x, pos_emb = xs_pad
+                                x = x + self.conditioning_layer(ctc_out)
+                                xs_pad = (x, pos_emb)
+                            else:
+                                xs_pad = xs_pad + self.conditioning_layer(ctc_out)
+            else:
+                # multi-granular targets CTC
+                inter_idx = 0
+                for layer_idx, encoder_layer in enumerate(self.encoders):
+                    xs_pad, masks = encoder_layer(xs_pad, masks)
+
+                    if layer_idx + 1 in self.interctc_layer_idx:
+                        encoder_out = xs_pad
+                        if isinstance(encoder_out, tuple):
+                            encoder_out = encoder_out[0]
+
+                        # intermediate outputs are also normalized
+                        if self.normalize_before:
+                            encoder_out = self.after_norm[inter_idx](encoder_out)
+
+                        intermediate_outs.append((layer_idx + 1, encoder_out))
+
+                        if self.interctc_use_conditioning:
+                            ctc_out = ctc[inter_idx].softmax(encoder_out)
+
+                            if isinstance(xs_pad, tuple):
+                                x, pos_emb = xs_pad
+                                x = x + self.conditioning_layer[inter_idx](ctc_out)
+                                xs_pad = (x, pos_emb)
+                            else:
+                                xs_pad = xs_pad + self.conditioning_layer[inter_idx](
+                                    ctc_out
+                                )
+                        inter_idx += 1
         elif self.transparent_attention:
             # do transparent attention, return hidden states of all encoder layers
             src_emb = xs_pad[0] if isinstance(xs_pad, tuple) else xs_pad
@@ -384,7 +414,10 @@ class ConformerEncoder(AbsEncoder):
         if isinstance(xs_pad, tuple):
             xs_pad = xs_pad[0]
         if self.normalize_before:
-            xs_pad = self.after_norm(xs_pad)
+            if not isinstance(self.after_norm, torch.nn.ModuleList):
+                xs_pad = self.after_norm(xs_pad)
+            else:
+                xs_pad = self.after_norm[-1](xs_pad)
 
         olens = masks.squeeze(1).sum(1)
         if len(intermediate_outs) > 0:

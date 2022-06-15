@@ -103,7 +103,7 @@ def detect_non_silence(
     )
     framed_w *= scipy.signal.get_window(window, frame_length).astype(framed_w.dtype)
     # power: (C, T)
-    power = (framed_w**2).mean(axis=-1)
+    power = (framed_w ** 2).mean(axis=-1)
     # mean_power: (C, 1)
     mean_power = np.mean(power, axis=-1, keepdims=True)
     if np.all(mean_power == 0):
@@ -168,8 +168,7 @@ class CommonPreprocessor(AbsPreprocessor):
                 g2p_type=g2p_type,
             )
             self.token_id_converter = TokenIDConverter(
-                token_list=token_list,
-                unk_symbol=unk_symbol,
+                token_list=token_list, unk_symbol=unk_symbol,
             )
         else:
             self.text_cleaner = None
@@ -281,7 +280,7 @@ class CommonPreprocessor(AbsPreprocessor):
                         # noise: (Nmic, Time)
                         noise = noise.T
 
-                        noise_power = (noise**2).mean()
+                        noise_power = (noise ** 2).mean()
                         scale = (
                             10 ** (-noise_db / 20)
                             * np.sqrt(power)
@@ -359,8 +358,7 @@ class CommonPreprocessor_multi(AbsPreprocessor):
                 g2p_type=g2p_type,
             )
             self.token_id_converter = TokenIDConverter(
-                token_list=token_list,
-                unk_symbol=unk_symbol,
+                token_list=token_list, unk_symbol=unk_symbol,
             )
         else:
             self.text_cleaner = None
@@ -420,6 +418,8 @@ class MutliTokenizerCommonPreprocessor(CommonPreprocessor):
         text_name: List[str] = ["text"],
     ):
         # TODO(jiatong): sync with Kamo and Jing on interface for preprocessor
+        # NOTE: token_type, token_list and bpemodel are just used for compatibility,
+        # and will be re-assign later
         super().__init__(
             train=train,
             token_type=token_type[0],
@@ -464,10 +464,7 @@ class MutliTokenizerCommonPreprocessor(CommonPreprocessor):
                     )
                 )
                 self.token_id_converter.append(
-                    TokenIDConverter(
-                        token_list=token_list[i],
-                        unk_symbol=unk_symbol,
-                    )
+                    TokenIDConverter(token_list=token_list[i], unk_symbol=unk_symbol,)
                 )
             else:
                 self.tokenizer.append(None)
