@@ -267,32 +267,28 @@ class Speech2Text:
 
         # b. Forward Encoder
         enc, _ = self.asr_model.encode(**batch)
-        transparent_attention = getattr(
-            self.asr_model.encoder, "transparent_attention", None
-        )
+        inters = None
         if isinstance(enc, tuple):
-            # for transparent attention
-            inters = enc[1] if transparent_attention else None
+            inters = enc[1]
             enc = enc[0]
-        else:
-            inters = None
         assert len(enc) == 1, len(enc)
+
+        # forward featurizer
+        enc_fusion = None
+        if self.asr_model.featurizer is not None:
+            assert inters is not None
+            enc_fusion = self.asr_model.featurizer([it[1] for it in inters] + [enc])
+            enc_fusion = [ef[0] for ef in enc_fusion]
 
         # c. Passed the encoder result and the beam search
         if self.beam_search_transducer:
             nbest_hyps = self.beam_search_transducer(enc[0])
         else:
-            if inters is not None:
-                # for transparent attention, remove the batch dim
-                # since it equals to 1
-                enc_inter_outs = [i[0] for i in inters]
-            else:
-                enc_inter_outs = None
             nbest_hyps = self.beam_search(
                 x=enc[0],
                 maxlenratio=self.maxlenratio,
                 minlenratio=self.minlenratio,
-                enc_inter_outs=enc_inter_outs,
+                x_fusion=enc_fusion,
             )
 
         nbest_hyps = nbest_hyps[: self.nbest]

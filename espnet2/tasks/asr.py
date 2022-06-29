@@ -44,6 +44,10 @@ from espnet2.asr.encoder.contextual_block_conformer_encoder import (
 from espnet2.asr.encoder.vgg_rnn_encoder import VGGRNNEncoder
 from espnet2.asr.encoder.wav2vec2_encoder import FairSeqWav2Vec2Encoder
 from espnet2.asr.espnet_model import ESPnetASRModel
+from espnet2.asr.featurizer.featurizer import (
+    WeightedSumFeaturizer,
+    IdentityFeaturizer,
+)
 from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.frontend.default import DefaultFrontend
 from espnet2.asr.frontend.fused import FusedFrontends
@@ -143,6 +147,12 @@ postencoder_choices = ClassChoices(
     default=None,
     optional=True,
 )
+featurizer_choices = ClassChoices(
+    name="featurizer",
+    classes=dict(weightedsum=WeightedSumFeaturizer, identity=IdentityFeaturizer),
+    type_check=torch.nn.Module,
+    default=None,
+)
 decoder_choices = ClassChoices(
     "decoder",
     classes=dict(
@@ -180,6 +190,8 @@ class ASRTask(AbsTask):
         encoder_choices,
         # --postencoder and --postencoder_conf
         postencoder_choices,
+        # --featurizer and --featurizer_conf
+        featurizer_choices,
         # --decoder and --decoder_conf
         decoder_choices,
     ]
@@ -520,7 +532,14 @@ class ASRTask(AbsTask):
         else:
             postencoder = None
 
-        # 5. Decoder
+        # 5. Featurizer
+        if getattr(args, "featurizer", None) is not None:
+            featurizer_class = featurizer_choices.get_class(args.featurizer)
+            featurizer = featurizer_class(**args.featurizer_conf)
+        else:
+            featurizer = None
+
+        # 6. Decoder
         decoder_class = decoder_choices.get_class(args.decoder)
 
         if args.decoder == "transducer":
@@ -551,7 +570,7 @@ class ASRTask(AbsTask):
 
             joint_network = None
 
-        # 6. CTC
+        # 7. CTC
         if len(args.token_lists) == 0:
             ctc = CTC(
                 odim=vocab_size,
@@ -585,6 +604,7 @@ class ASRTask(AbsTask):
             preencoder=preencoder,
             encoder=encoder,
             postencoder=postencoder,
+            featurizer=featurizer,
             decoder=decoder,
             ctc=ctc,
             joint_network=joint_network,

@@ -3,44 +3,43 @@
 
 """Conformer encoder definition."""
 
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import Union
-
 import logging
-import torch
+from typing import List, Optional, Tuple, Union
 
+import torch
 from typeguard import check_argument_types
 
 from espnet.nets.pytorch_backend.conformer.convolution import ConvolutionModule
 from espnet.nets.pytorch_backend.conformer.encoder_layer import EncoderLayer
-from espnet.nets.pytorch_backend.nets_utils import get_activation
-from espnet.nets.pytorch_backend.nets_utils import make_pad_mask
+from espnet.nets.pytorch_backend.nets_utils import get_activation, make_pad_mask
 from espnet.nets.pytorch_backend.transformer.attention import (
-    MultiHeadedAttention,  # noqa: H301
-    RelPositionMultiHeadedAttention,  # noqa: H301
-    LegacyRelPositionMultiHeadedAttention,  # noqa: H301
+    LegacyRelPositionMultiHeadedAttention,
+    MultiHeadedAttention,
+    RelPositionMultiHeadedAttention,
 )
 from espnet.nets.pytorch_backend.transformer.embedding import (
-    PositionalEncoding,  # noqa: H301
-    ScaledPositionalEncoding,  # noqa: H301
-    RelPositionalEncoding,  # noqa: H301
-    LegacyRelPositionalEncoding,  # noqa: H301
+    LegacyRelPositionalEncoding,
+    PositionalEncoding,
+    RelPositionalEncoding,
+    ScaledPositionalEncoding,
 )
 from espnet.nets.pytorch_backend.transformer.layer_norm import LayerNorm
-from espnet.nets.pytorch_backend.transformer.multi_layer_conv import Conv1dLinear
-from espnet.nets.pytorch_backend.transformer.multi_layer_conv import MultiLayeredConv1d
+from espnet.nets.pytorch_backend.transformer.multi_layer_conv import (
+    Conv1dLinear,
+    MultiLayeredConv1d,
+)
 from espnet.nets.pytorch_backend.transformer.positionwise_feed_forward import (
-    PositionwiseFeedForward,  # noqa: H301
+    PositionwiseFeedForward,
 )
 from espnet.nets.pytorch_backend.transformer.repeat import repeat
-from espnet.nets.pytorch_backend.transformer.subsampling import check_short_utt
-from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling
-from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling2
-from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling6
-from espnet.nets.pytorch_backend.transformer.subsampling import Conv2dSubsampling8
-from espnet.nets.pytorch_backend.transformer.subsampling import TooShortUttError
+from espnet.nets.pytorch_backend.transformer.subsampling import (
+    Conv2dSubsampling,
+    Conv2dSubsampling2,
+    Conv2dSubsampling6,
+    Conv2dSubsampling8,
+    TooShortUttError,
+    check_short_utt,
+)
 from espnet2.asr.ctc import CTC
 from espnet2.asr.encoder.abs_encoder import AbsEncoder
 
@@ -107,8 +106,7 @@ class ConformerEncoder(AbsEncoder):
         interctc_layer_idx: List[int] = [],
         interctc_use_conditioning: bool = False,
         stochastic_depth_rate: Union[float, List[float]] = 0.0,
-        transparent_attention: bool = False,
-        ta_source_embedding: bool = False,
+        return_all_hiddens: bool = False,
     ):
         assert check_argument_types()
         super().__init__()
@@ -285,14 +283,7 @@ class ConformerEncoder(AbsEncoder):
         self.interctc_use_conditioning = interctc_use_conditioning
         self.conditioning_layer = None
 
-        # args for transparent attention as proposed in https://arxiv.org/abs/1808.07561
-        self.transparent_attention = transparent_attention
-        self.ta_source_embedding = ta_source_embedding
-        if self.transparent_attention:
-            # TODO: add tranparent attention FFN
-            if not self.normalize_before and self.ta_source_embedding:
-                # add an additional norm for the embed
-                self.srcemb_norm = LayerNorm(output_size)
+        self.return_all_hiddens = return_all_hiddens
 
     def output_size(self) -> int:
         return self._output_size
@@ -393,23 +384,17 @@ class ConformerEncoder(AbsEncoder):
                                     ctc_out
                                 )
                         inter_idx += 1
-        elif self.transparent_attention:
-            # do transparent attention, return hidden states of all encoder layers
-            src_emb = xs_pad[0] if isinstance(xs_pad, tuple) else xs_pad
-            if self.ta_source_embedding:
-                if self.normalize_before:
-                    src_emb = self.after_norm(src_emb)
-                intermediate_outs.append(src_emb)
-
-            for layer_idx, encoder_layer in enumerate(self.encoders):
-                xs_pad, masks = encoder_layer(xs_pad, masks)
-                encoder_out = xs_pad[0] if isinstance(xs_pad, tuple) else xs_pad
-                if self.normalize_before:
-                    encoder_out = self.after_norm(encoder_out)
-                intermediate_outs.append(encoder_out)
         else:
             # do normal encoder process
-            xs_pad, masks = self.encoders(xs_pad, masks)
+            for layer_idx, encoder_layer in enumerate(self.encoders):
+                xs_pad, masks = encoder_layer(xs_pad, masks)
+
+                if self.return_all_hiddens and layer_idx < len(self.encoders) - 1:
+                    # only restore hiddens outputs w/o the last output
+                    encoder_out = xs_pad[0] if isinstance(xs_pad, tuple) else xs_pad
+                    if self.normalize_before:
+                        encoder_out = self.after_norm(encoder_out)
+                    intermediate_outs.append((layer_idx + 1, encoder_out))
 
         if isinstance(xs_pad, tuple):
             xs_pad = xs_pad[0]

@@ -1,13 +1,9 @@
-from contextlib import contextmanager
-from distutils.version import LooseVersion
 import logging
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import Union
+from contextlib import contextmanager
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
+from packaging.version import parse as V
 from typeguard import check_argument_types
 
 from espnet.nets.e2e_asr_common import ErrorCalculator
@@ -30,7 +26,7 @@ from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
 
-if LooseVersion(torch.__version__) >= LooseVersion("1.6.0"):
+if V(torch.__version__) >= V("1.6.0"):
     from torch.cuda.amp import autocast
 else:
     # Nothing to do if torch<1.6.0
@@ -52,6 +48,7 @@ class HierASRModel(AbsESPnetModel):
         preencoder: Optional[AbsPreEncoder],
         encoder: AbsEncoder,
         postencoder: Optional[AbsPostEncoder],
+        featurizer: Optional[torch.nn.Module],
         decoder: AbsDecoder,
         ctc: torch.nn.ModuleList,
         joint_network: Optional[torch.nn.Module],
@@ -87,6 +84,8 @@ class HierASRModel(AbsESPnetModel):
         self.preencoder = preencoder
         self.postencoder = postencoder
         self.encoder = encoder
+        self.featurizer = featurizer
+
         self.num_interctc_layer = len(self.encoder.interctc_layer_idx)
         assert self.num_interctc_layer > 0, self.num_interctc_layer
         assert self.num_interctc_layer + 1 == len(self.vocab_size)
@@ -218,6 +217,15 @@ class HierASRModel(AbsESPnetModel):
                 1 - self.interctc_weight
             ) * loss_ctc + self.interctc_weight * loss_interctc
 
+        # Featurizer branch
+        # featurizer input: [inter1, inter2, ...  , encoder_out]
+        # featurizer output: [fusion_feat1, fusion_feat2, ... , fusion_feat{num_dec}]
+        encoder_out_fusion = None
+        if self.featurizer is not None:
+            assert intermediate_outs is not None
+            encoder_out_fusion = self.featurizer(
+                [inter[1] for inter in intermediate_outs] + [encoder_out]
+            )
         # 2b. Attention decoder branch
         if self.ctc_weight != 1.0:
             loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
@@ -225,7 +233,7 @@ class HierASRModel(AbsESPnetModel):
                 encoder_out_lens,
                 texts[-1],
                 texts_lengths[-1],
-                intermediate_outs,
+                encoder_out_fusion=encoder_out_fusion,
             )
 
             # 3. CTC-Att loss definition
@@ -433,18 +441,14 @@ class HierASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
-        intermediate_outs: List[torch.Tensor] = None,
+        encoder_out_fusion: List[torch.Tensor] = None,
     ):
         ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
         ys_in_lens = ys_pad_lens + 1
 
         # 1. Forward decoder
         decoder_out, _ = self.decoder(
-            encoder_out,
-            encoder_out_lens,
-            ys_in_pad,
-            ys_in_lens,
-            enc_inter_outs=intermediate_outs,
+            encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens, encoder_out_fusion,
         )
 
         # 2. Compute attention loss

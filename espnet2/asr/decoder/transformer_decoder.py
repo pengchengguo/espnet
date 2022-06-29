@@ -2,15 +2,12 @@
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
 """Decoder definition."""
-from typing import Any
-from typing import List
-from typing import Sequence
-from typing import Tuple
+from typing import Any, List, Sequence, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 from typeguard import check_argument_types
 
+from espnet2.asr.decoder.abs_decoder import AbsDecoder
 from espnet.nets.pytorch_backend.nets_utils import make_pad_mask
 from espnet.nets.pytorch_backend.transformer.attention import MultiHeadedAttention
 from espnet.nets.pytorch_backend.transformer.decoder_layer import DecoderLayer
@@ -22,11 +19,10 @@ from espnet.nets.pytorch_backend.transformer.lightconv import LightweightConvolu
 from espnet.nets.pytorch_backend.transformer.lightconv2d import LightweightConvolution2D
 from espnet.nets.pytorch_backend.transformer.mask import subsequent_mask
 from espnet.nets.pytorch_backend.transformer.positionwise_feed_forward import (
-    PositionwiseFeedForward,  # noqa: H301
+    PositionwiseFeedForward,
 )
 from espnet.nets.pytorch_backend.transformer.repeat import repeat
 from espnet.nets.scorer_interface import BatchScorerInterface
-from espnet2.asr.decoder.abs_decoder import AbsDecoder
 
 
 class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
@@ -92,7 +88,6 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
 
         # Must set by the inheritance
         self.decoders = None
-        self.ta_weights = None
 
     def forward(
         self,
@@ -100,7 +95,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         hlens: torch.Tensor,
         ys_in_pad: torch.Tensor,
         ys_in_lens: torch.Tensor,
-        enc_inter_outs: List[torch.Tensor] = None,
+        hs_pad_fusion: List[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward decoder.
 
@@ -128,40 +123,24 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         tgt_mask = tgt_mask & m
 
         memory = hs_pad
+        memory_fusion = hs_pad_fusion
         memory_mask = (~make_pad_mask(hlens, maxlen=memory.size(1)))[:, None, :].to(
             memory.device
         )
         # Padding for Longformer
-        if memory_mask.shape[-1] != memory.shape[1]:
-            padlen = memory.shape[1] - memory_mask.shape[-1]
-            memory_mask = torch.nn.functional.pad(
-                memory_mask, (0, padlen), "constant", False
-            )
+        # if memory_mask.shape[-1] != memory.shape[1]:
+        #     padlen = memory.shape[1] - memory_mask.shape[-1]
+        #     memory_mask = torch.nn.functional.pad(
+        #         memory_mask, (0, padlen), "constant", False
+        #     )
 
         x = self.embed(tgt)
-
-        if self.transparent_attention and enc_inter_outs is not None:
-            for layer_idx, decoder_layer in enumerate(self.decoders):
-                assert self.num_ta_layers == len(enc_inter_outs)
-                cur_weight = F.softmax(self.ta_weights[layer_idx], dim=0)
-                cur_weight = F.dropout(
-                    cur_weight, self.ta_dropout, training=self.training
-                )
-                encoder_state = [
-                    cur_weight[ta_idx] * enc_inter_outs[ta_idx]
-                    for ta_idx in range(self.num_ta_layers)
-                ]
-                encoder_state = torch.stack(encoder_state).sum(0)
-                memory = self.ta_final_norm(encoder_state)
-                memory = F.dropout(memory, self.ta_dropout, training=self.training)
-                x, tgt_mask, memory, memory_mask = decoder_layer(
-                    x, tgt_mask, memory, memory_mask
-                )
-
-        else:
-            # do normal decoder process
-            x, tgt_mask, memory, memory_mask = self.decoders(
-                x, tgt_mask, memory, memory_mask
+        for layer_idx, decoder_layer in enumerate(self.decoders):
+            x, tgt_mask, memory, memory_mask = decoder_layer(
+                x,
+                tgt_mask,
+                memory if memory_fusion is None else memory_fusion[layer_idx],
+                memory_mask,
             )
         if self.normalize_before:
             x = self.after_norm(x)
@@ -177,7 +156,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         tgt_mask: torch.Tensor,
         memory: torch.Tensor,
         cache: List[torch.Tensor] = None,
-        enc_inter_outs: List[torch.Tensor] = None,
+        memory_fusion: List[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
         """Forward one step.
 
@@ -197,17 +176,12 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
             cache = [None] * len(self.decoders)
         new_cache = []
         for idx, (c, decoder) in enumerate(zip(cache, self.decoders)):
-            if self.transparent_attention and enc_inter_outs is not None:
-                assert self.num_ta_layers == len(enc_inter_outs)
-                cur_weight = F.softmax(self.ta_weights[idx], dim=0)
-                encoder_state = [
-                    cur_weight[ta_idx] * enc_inter_outs[ta_idx]
-                    for ta_idx in range(self.num_ta_layers)
-                ]
-                encoder_state = torch.stack(encoder_state).sum(0)
-                memory = self.ta_final_norm(encoder_state)
             x, tgt_mask, memory, memory_mask = decoder(
-                x, tgt_mask, memory, None, cache=c
+                x,
+                tgt_mask,
+                memory if memory_fusion is None else memory_fusion[idx],
+                None,
+                cache=c,
             )
             new_cache.append(x)
 
@@ -233,7 +207,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         ys: torch.Tensor,
         states: List[Any],
         xs: torch.Tensor,
-        enc_inter_outs: List[torch.Tensor] = None,
+        xs_fusion: List[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, List[Any]]:
         """Score new token batch.
 
@@ -262,9 +236,10 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
             ]
 
         # batch decoding
-        ys_mask = subsequent_mask(ys.size(-1), device=xs.device).unsqueeze(0)
+        device = xs[-1].device if isinstance(xs, list) else xs.device
+        ys_mask = subsequent_mask(ys.size(-1), device=device).unsqueeze(0)
         logp, states = self.forward_one_step(
-            ys, ys_mask, xs, cache=batch_state, enc_inter_outs=enc_inter_outs
+            ys, ys_mask, xs, cache=batch_state, memory_fusion=xs_fusion
         )
 
         # transpose state of [layer, batch] into [batch, layer]
@@ -289,8 +264,6 @@ class TransformerDecoder(BaseTransformerDecoder):
         pos_enc_class=PositionalEncoding,
         normalize_before: bool = True,
         concat_after: bool = False,
-        transparent_attention: bool = False,
-        num_ta_layers: int = 12,
     ):
         assert check_argument_types()
         super().__init__(
@@ -321,18 +294,6 @@ class TransformerDecoder(BaseTransformerDecoder):
                 concat_after,
             ),
         )
-
-        self.transparent_attention = transparent_attention
-        self.num_ta_layers = num_ta_layers
-        if self.transparent_attention:
-            self.ta_weights = torch.nn.Parameter(
-                torch.Tensor(len(self.decoders), self.num_ta_layers)
-            )
-            ta_range = (2.0 / (len(self.decoders) + num_ta_layers)) ** 0.5
-            torch.nn.init.uniform_(self.ta_weights, -ta_range, ta_range)
-            self.ta_dropout = dropout_rate
-            self.ta_dropconnect = 0.0
-            self.ta_final_norm = LayerNorm(encoder_output_size)
 
 
 class LightweightConvolutionTransformerDecoder(BaseTransformerDecoder):

@@ -1,14 +1,9 @@
-from contextlib import contextmanager
-from distutils.version import LooseVersion
 import logging
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Tuple
-from typing import Union
+from contextlib import contextmanager
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
+from packaging.version import parse as V
 from typeguard import check_argument_types
 
 from espnet.nets.e2e_asr_common import ErrorCalculator
@@ -30,7 +25,7 @@ from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
 
-if LooseVersion(torch.__version__) >= LooseVersion("1.6.0"):
+if V(torch.__version__) >= V("1.6.0"):
     from torch.cuda.amp import autocast
 else:
     # Nothing to do if torch<1.6.0
@@ -51,6 +46,7 @@ class ESPnetASRModel(AbsESPnetModel):
         normalize: Optional[AbsNormalize],
         preencoder: Optional[AbsPreEncoder],
         encoder: AbsEncoder,
+        featurizer: Optional[torch.nn.Module],
         postencoder: Optional[AbsPostEncoder],
         decoder: AbsDecoder,
         ctc: CTC,
@@ -87,6 +83,7 @@ class ESPnetASRModel(AbsESPnetModel):
         self.preencoder = preencoder
         self.postencoder = postencoder
         self.encoder = encoder
+        self.featurizer = featurizer
 
         if not hasattr(self.encoder, "interctc_use_conditioning"):
             self.encoder.interctc_use_conditioning = False
@@ -100,6 +97,7 @@ class ESPnetASRModel(AbsESPnetModel):
         self.error_calculator = None
 
         if self.use_transducer_decoder:
+            assert self.featurizer is None, "Featurizer is not supported for transducer"
             from warprnnt_pytorch import RNNTLoss
 
             self.decoder = decoder
@@ -231,6 +229,16 @@ class ESPnetASRModel(AbsESPnetModel):
                 1 - self.interctc_weight
             ) * loss_ctc + self.interctc_weight * loss_interctc
 
+        # Featurizer branch
+        # featurizer input: [inter1, inter2, ...  , encoder_out]
+        # featurizer output: [fusion_feat1, fusion_feat2, ... , fusion_feat{num_dec}]
+        encoder_out_fusion = None
+        if self.featurizer is not None:
+            assert intermediate_outs is not None
+            encoder_out_fusion = self.featurizer(
+                [inter[1] for inter in intermediate_outs] + [encoder_out]
+            )
+
         if self.use_transducer_decoder:
             # 2a. Transducer decoder branch
             (
@@ -259,7 +267,7 @@ class ESPnetASRModel(AbsESPnetModel):
                     encoder_out_lens,
                     text,
                     text_lengths,
-                    intermediate_outs,
+                    encoder_out_fusion=encoder_out_fusion,
                 )
 
             # 3. CTC-Att loss definition
@@ -472,18 +480,14 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
-        intermediate_outs: List[torch.Tensor] = None,
+        encoder_out_fusion: List[torch.Tensor] = None,
     ):
         ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
         ys_in_lens = ys_pad_lens + 1
 
         # 1. Forward decoder
         decoder_out, _ = self.decoder(
-            encoder_out,
-            encoder_out_lens,
-            ys_in_pad,
-            ys_in_lens,
-            enc_inter_outs=intermediate_outs,
+            encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens, encoder_out_fusion,
         )
 
         # 2. Compute attention loss

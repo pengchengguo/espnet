@@ -6,6 +6,7 @@ from typing import Dict
 from typing import List
 from typing import NamedTuple
 from typing import Tuple
+from typing import Union
 
 import torch
 from torch.nn.utils.rnn import pad_sequence
@@ -138,7 +139,7 @@ class BatchBeamSearch(BeamSearch):
         self,
         hyp: BatchHypothesis,
         x: torch.Tensor,
-        enc_inter_outs: List[torch.Tensor] = None,
+        x_fusion: List[torch.Tensor] = None,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """Score new hypothesis by `self.full_scorers`.
 
@@ -159,7 +160,7 @@ class BatchBeamSearch(BeamSearch):
         for k, d in self.full_scorers.items():
             if k == "decoder":
                 scores[k], states[k] = d.batch_score(
-                    hyp.yseq, hyp.states[k], x, enc_inter_outs=enc_inter_outs
+                    hyp.yseq, hyp.states[k], x, x_fusion
                 )
             else:
                 scores[k], states[k] = d.batch_score(hyp.yseq, hyp.states[k], x)
@@ -216,7 +217,7 @@ class BatchBeamSearch(BeamSearch):
         self,
         running_hyps: BatchHypothesis,
         x: torch.Tensor,
-        enc_inter_outs: List[torch.Tensor] = None,
+        x_fusion: List[torch.Tensor] = None,
     ) -> BatchHypothesis:
         """Search new tokens for running hypotheses and encoded speech x.
 
@@ -234,12 +235,10 @@ class BatchBeamSearch(BeamSearch):
         weighted_scores = torch.zeros(
             n_batch, self.n_vocab, dtype=x.dtype, device=x.device
         )
-        if enc_inter_outs is not None:
-            enc_inter_outs = [
-                inter.expand(n_batch, *inter.shape) for inter in enc_inter_outs
-            ]
+        if x_fusion is not None:
+            x_fusion = [xf.expand(n_batch, *xf.shape) for xf in x_fusion]
         scores, states = self.score_full(
-            running_hyps, x.expand(n_batch, *x.shape), enc_inter_outs=enc_inter_outs
+            running_hyps, x.expand(n_batch, *x.shape), x_fusion=x_fusion
         )
         for k in self.full_scorers:
             weighted_scores += self.weights[k] * scores[k]

@@ -8,12 +8,7 @@ import logging
 from pathlib import Path
 import time
 from typing import ContextManager
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Sequence
-from typing import Tuple
-from typing import Union
+from typing import ContextManager, Dict, List, Optional, Sequence, Tuple, Union
 import warnings
 
 import humanfriendly
