@@ -355,11 +355,11 @@ class Reporter:
         if LooseVersion(torch.__version__) >= LooseVersion("1.4.0"):
             if torch.cuda.is_initialized():
                 stats["gpu_max_cached_mem_GB"] = (
-                    torch.cuda.max_memory_reserved() / 2 ** 30
+                    torch.cuda.max_memory_reserved() / 2**30
                 )
         else:
             if torch.cuda.is_available() and torch.cuda.max_memory_cached() > 0:
-                stats["gpu_cached_mem_GB"] = torch.cuda.max_memory_cached() / 2 ** 30
+                stats["gpu_cached_mem_GB"] = torch.cuda.max_memory_cached() / 2**30
 
         self.stats.setdefault(self.epoch, {})[sub_reporter.key] = stats
         sub_reporter.finished()
@@ -503,20 +503,31 @@ class Reporter:
             plt.savefig(p)
 
     def save_param(self, model, param_name, output_dir):
-        """"Save specific parameter as numpy array."""
+        """ "Save specific parameter as numpy array."""
         save_dir = output_dir / "params" / param_name
         save_dir.mkdir(parents=True, exist_ok=True)
         has_this_param = False
-        for k, p in model.named_parameters():
-            if k == param_name:
-                has_this_param = True
-                save_name = "epoch{}.npy".format(self.get_epoch())
-                import numpy as np
 
-                np.save(
-                    save_dir / save_name, p.detach().cpu().numpy(),
-                )
-                break
+        if hasattr(model.decoder, param_name.split(".")[-1]):
+            # TODO: dirty code to support get model attribute
+            param = getattr(model.decoder, param_name.split(".")[-1])
+            has_this_param = True
+            save_name = "epoch{}.npy".format(self.get_epoch())
+            import numpy as np
+
+            np.save(save_dir / save_name, param.detach().cpu().numpy())
+        else:
+            for k, p in model.named_parameters():
+                if k == param_name:
+                    has_this_param = True
+                    save_name = "epoch{}.npy".format(self.get_epoch())
+                    import numpy as np
+
+                    np.save(
+                        save_dir / save_name,
+                        p.detach().cpu().numpy(),
+                    )
+                    break
 
         if not has_this_param:
             logging.warning(

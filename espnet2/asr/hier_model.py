@@ -13,15 +13,12 @@ from espnet.nets.pytorch_backend.transformer.layer_norm import LayerNorm
 from espnet.nets.pytorch_backend.transformer.label_smoothing_loss import (
     LabelSmoothingLoss,  # noqa: H301
 )
-from espnet2.asr.ctc import CTC
 from espnet2.asr.decoder.abs_decoder import AbsDecoder
 from espnet2.asr.encoder.abs_encoder import AbsEncoder
 from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
 from espnet2.asr.preencoder.abs_preencoder import AbsPreEncoder
 from espnet2.asr.specaug.abs_specaug import AbsSpecAug
-from espnet2.asr.transducer.error_calculator import ErrorCalculatorTransducer
-from espnet2.asr.transducer.utils import get_transducer_task_io
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.torch_utils.device_funcs import force_gatherable
 from espnet2.train.abs_espnet_model import AbsESPnetModel
@@ -138,10 +135,10 @@ class HierASRModel(AbsESPnetModel):
         self.extract_feats_in_collect_stats = extract_feats_in_collect_stats
 
     def forward(
-        self, **data,
+        self,
+        **data,
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor], torch.Tensor]:
-        """Frontend + Encoder + Decoder + Calc loss
-        """
+        """Frontend + Encoder + Decoder + Calc loss"""
         speech = data["speech"]
         speech_lengths = data["speech_lengths"]
         texts = []
@@ -220,12 +217,16 @@ class HierASRModel(AbsESPnetModel):
         # Featurizer branch
         # featurizer input: [inter1, inter2, ...  , encoder_out]
         # featurizer output: [fusion_feat1, fusion_feat2, ... , fusion_feat{num_dec}]
-        encoder_out_fusion = None
-        if self.featurizer is not None:
-            assert intermediate_outs is not None
-            encoder_out_fusion = self.featurizer(
-                [inter[1] for inter in intermediate_outs] + [encoder_out]
-            )
+        # encoder_out_fusion = None
+        # if self.featurizer is not None:
+        #     assert intermediate_outs is not None
+        #     encoder_out_fusion = self.featurizer(
+        #         [inter[1] for inter in intermediate_outs] + [encoder_out]
+        #     )
+        encoder_out_seqs = None
+        if intermediate_outs is not None:
+            encoder_out_seqs = [inter[1] for inter in intermediate_outs] + [encoder_out]
+
         # 2b. Attention decoder branch
         if self.ctc_weight != 1.0:
             loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
@@ -233,7 +234,7 @@ class HierASRModel(AbsESPnetModel):
                 encoder_out_lens,
                 texts[-1],
                 texts_lengths[-1],
-                encoder_out_fusion=encoder_out_fusion,
+                encoder_out_seqs=encoder_out_seqs,
             )
 
             # 3. CTC-Att loss definition
@@ -245,6 +246,8 @@ class HierASRModel(AbsESPnetModel):
                 loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
 
             # Collect Attn branch stats
+            if hasattr(self.decoder.decoders[0].src_attn, "curr_temp"):
+                stats["curr_temp"] = self.decoder.decoders[0].src_attn.curr_temp
             stats["loss_att"] = loss_att.detach() if loss_att is not None else None
             stats["acc"] = acc_att
             stats["cer"] = cer_att
@@ -258,7 +261,10 @@ class HierASRModel(AbsESPnetModel):
         return loss, stats, weight
 
     def collect_feats(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor, **kwargs,
+        self,
+        speech: torch.Tensor,
+        speech_lengths: torch.Tensor,
+        **kwargs,
     ) -> Dict[str, torch.Tensor]:
         if self.extract_feats_in_collect_stats:
             feats, feats_lengths = self._extract_feats(speech, speech_lengths)
@@ -441,14 +447,18 @@ class HierASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
-        encoder_out_fusion: List[torch.Tensor] = None,
+        encoder_out_seqs: List[torch.Tensor] = None,
     ):
         ys_in_pad, ys_out_pad = add_sos_eos(ys_pad, self.sos, self.eos, self.ignore_id)
         ys_in_lens = ys_pad_lens + 1
 
         # 1. Forward decoder
         decoder_out, _ = self.decoder(
-            encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens, encoder_out_fusion,
+            encoder_out,
+            encoder_out_lens,
+            ys_in_pad,
+            ys_in_lens,
+            encoder_out_seqs,
         )
 
         # 2. Compute attention loss

@@ -139,7 +139,7 @@ class BatchBeamSearch(BeamSearch):
         self,
         hyp: BatchHypothesis,
         x: torch.Tensor,
-        x_fusion: List[torch.Tensor] = None,
+        x_seqs: List[torch.Tensor] = None,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """Score new hypothesis by `self.full_scorers`.
 
@@ -159,9 +159,7 @@ class BatchBeamSearch(BeamSearch):
         states = dict()
         for k, d in self.full_scorers.items():
             if k == "decoder":
-                scores[k], states[k] = d.batch_score(
-                    hyp.yseq, hyp.states[k], x, x_fusion
-                )
+                scores[k], states[k] = d.batch_score(hyp.yseq, hyp.states[k], x, x_seqs)
             else:
                 scores[k], states[k] = d.batch_score(hyp.yseq, hyp.states[k], x)
         return scores, states
@@ -217,7 +215,7 @@ class BatchBeamSearch(BeamSearch):
         self,
         running_hyps: BatchHypothesis,
         x: torch.Tensor,
-        x_fusion: List[torch.Tensor] = None,
+        x_seqs: List[torch.Tensor] = None,
     ) -> BatchHypothesis:
         """Search new tokens for running hypotheses and encoded speech x.
 
@@ -235,10 +233,10 @@ class BatchBeamSearch(BeamSearch):
         weighted_scores = torch.zeros(
             n_batch, self.n_vocab, dtype=x.dtype, device=x.device
         )
-        if x_fusion is not None:
-            x_fusion = [xf.expand(n_batch, *xf.shape) for xf in x_fusion]
+        if x_seqs is not None:
+            x_seqs = [xs.expand(n_batch, *xs.shape) for xs in x_seqs]
         scores, states = self.score_full(
-            running_hyps, x.expand(n_batch, *x.shape), x_fusion=x_fusion
+            running_hyps, x.expand(n_batch, *x.shape), x_seqs=x_seqs
         )
         for k in self.full_scorers:
             weighted_scores += self.weights[k] * scores[k]

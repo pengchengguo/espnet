@@ -13,9 +13,9 @@ from espnet.nets.pytorch_backend.transformer.layer_norm import LayerNorm
 
 class WeightedSumFeaturizer(torch.nn.Module):
     """Weighted summation featurizer (transparent attention) definition.
-    
+
     Combining the latent features of encoder by a learnalbe weights.
-    
+
     Paper: https://arxiv.org/abs/1808.07561.
     """
 
@@ -66,11 +66,12 @@ class WeightedSumFeaturizer(torch.nn.Module):
 
 
 class IdentityFeaturizer(torch.nn.Module):
-    """Do anything to the input."""
-    def __init__():
-        super().__init__()
-        
+    """Return orignal input list or concat to a tensor."""
+
+    # def __init__(self, do_concat=False):
+    #     pass
+
     def forward(self, encoder_out_lst):
         assert isinstance(encoder_out_lst, list), type(encoder_out_lst)
-        
+
         return encoder_out_lst

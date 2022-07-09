@@ -3,11 +3,16 @@
 
 """Decoder definition."""
 from typing import Any, List, Sequence, Tuple, Union
+from xml.dom import NotSupportedErr
 
 import torch
 from typeguard import check_argument_types
 
 from espnet2.asr.decoder.abs_decoder import AbsDecoder
+from espnet2.asr.modules.attention import (
+    WeightedSumMultiHeadedAttention,
+    GumbelSoftmaxMultiHeadedAttention,
+)
 from espnet.nets.pytorch_backend.nets_utils import make_pad_mask
 from espnet.nets.pytorch_backend.transformer.attention import MultiHeadedAttention
 from espnet.nets.pytorch_backend.transformer.decoder_layer import DecoderLayer
@@ -88,6 +93,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
 
         # Must set by the inheritance
         self.decoders = None
+        self.save_weight = None
 
     def forward(
         self,
@@ -95,7 +101,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         hlens: torch.Tensor,
         ys_in_pad: torch.Tensor,
         ys_in_lens: torch.Tensor,
-        hs_pad_fusion: List[torch.Tensor] = None,
+        encoder_out_seqs: List[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Forward decoder.
 
@@ -114,6 +120,8 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
                 if use_output_layer is True,
             olens: (batch, )
         """
+        self.gather_weight()
+
         tgt = ys_in_pad
         # tgt_mask: (B, 1, L)
         tgt_mask = (~make_pad_mask(ys_in_lens)[:, None, :]).to(tgt.device)
@@ -122,11 +130,18 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         # tgt_mask: (B, L, L)
         tgt_mask = tgt_mask & m
 
-        memory = hs_pad
-        memory_fusion = hs_pad_fusion
-        memory_mask = (~make_pad_mask(hlens, maxlen=memory.size(1)))[:, None, :].to(
-            memory.device
-        )
+        if self.num_enc_seq == 1:
+            memory = hs_pad
+            memory_mask = (~make_pad_mask(hlens, maxlen=memory.size(1)))[:, None, :].to(
+                memory.device
+            )
+        else:
+            assert encoder_out_seqs is not None
+            memory = encoder_out_seqs
+            memory_mask = (~make_pad_mask(hlens, maxlen=memory[-1].size(1)))[
+                :, None, :
+            ].to(memory[-1].device)
+
         # Padding for Longformer
         # if memory_mask.shape[-1] != memory.shape[1]:
         #     padlen = memory.shape[1] - memory_mask.shape[-1]
@@ -139,7 +154,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
             x, tgt_mask, memory, memory_mask = decoder_layer(
                 x,
                 tgt_mask,
-                memory if memory_fusion is None else memory_fusion[layer_idx],
+                memory,
                 memory_mask,
             )
         if self.normalize_before:
@@ -156,7 +171,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         tgt_mask: torch.Tensor,
         memory: torch.Tensor,
         cache: List[torch.Tensor] = None,
-        memory_fusion: List[torch.Tensor] = None,
+        memory_seqs: List[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
         """Forward one step.
 
@@ -175,11 +190,12 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         if cache is None:
             cache = [None] * len(self.decoders)
         new_cache = []
+
         for idx, (c, decoder) in enumerate(zip(cache, self.decoders)):
             x, tgt_mask, memory, memory_mask = decoder(
                 x,
                 tgt_mask,
-                memory if memory_fusion is None else memory_fusion[idx],
+                memory if self.num_enc_seq == 1 else memory_seqs,
                 None,
                 cache=c,
             )
@@ -207,7 +223,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         ys: torch.Tensor,
         states: List[Any],
         xs: torch.Tensor,
-        xs_fusion: List[torch.Tensor] = None,
+        xs_seqs: List[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, List[Any]]:
         """Score new token batch.
 
@@ -239,12 +255,32 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         device = xs[-1].device if isinstance(xs, list) else xs.device
         ys_mask = subsequent_mask(ys.size(-1), device=device).unsqueeze(0)
         logp, states = self.forward_one_step(
-            ys, ys_mask, xs, cache=batch_state, memory_fusion=xs_fusion
+            ys, ys_mask, xs, cache=batch_state, memory_seqs=xs_seqs
         )
 
         # transpose state of [layer, batch] into [batch, layer]
         state_list = [[states[i][b] for i in range(n_layers)] for b in range(n_batch)]
         return logp, state_list
+
+    def gather_weight(self):
+        if hasattr(self.decoders[0].src_attn, "fusion_weight"):
+            # for WeightedSumMultiHeadedAttention
+            weights_lst = []
+            for idx in range(len(self.decoders)):
+                weights_lst.append(
+                    self.decoders[idx].src_attn.fusion_weight.cpu().detach()
+                )
+            self.save_weight = torch.stack(weights_lst).squeeze(-1)
+        elif hasattr(self.decoders[0].src_attn, "h_posterior"):
+            # for GumbelSoftmaxMultiHeadedAttention
+            weights_lst = []
+            for idx in range(len(self.decoders)):
+                weights_lst.append(
+                    self.decoders[idx].src_attn.h_posterior.cpu().detach()
+                )
+            self.save_weight = torch.stack(weights_lst)
+        else:
+            raise NotSupportedErr
 
 
 class TransformerDecoder(BaseTransformerDecoder):
@@ -252,7 +288,12 @@ class TransformerDecoder(BaseTransformerDecoder):
         self,
         vocab_size: int,
         encoder_output_size: int,
+        srcattention_layer_type: str = "mha",
         attention_heads: int = 4,
+        attention_heads_cand: int = 8,
+        temp: list = [2.0, 0.1, 0.999995],
+        num_enc_seq: int = 1,
+        combine_type: str = "sum",
         linear_units: int = 2048,
         num_blocks: int = 6,
         dropout_rate: float = 0.1,
@@ -277,7 +318,39 @@ class TransformerDecoder(BaseTransformerDecoder):
             normalize_before=normalize_before,
         )
 
+        self.num_enc_seq = num_enc_seq
         attention_dim = encoder_output_size
+        if srcattention_layer_type == "mha":
+            decoder_srcattn_layer = MultiHeadedAttention
+            decoder_srcattn_layer_args = (
+                attention_heads,
+                attention_dim,
+                self_attention_dropout_rate,
+            )
+        elif srcattention_layer_type == "weightedsum_mha":
+            decoder_srcattn_layer = WeightedSumMultiHeadedAttention
+            decoder_srcattn_layer_args = (
+                attention_heads,
+                attention_dim,
+                num_enc_seq,
+                src_attention_dropout_rate,
+            )
+        elif srcattention_layer_type == "gumbel_mha":
+            decoder_srcattn_layer = GumbelSoftmaxMultiHeadedAttention
+            decoder_srcattn_layer_args = (
+                attention_heads,
+                attention_heads_cand,
+                attention_dim,
+                num_enc_seq,
+                temp,
+                combine_type,
+                src_attention_dropout_rate,
+            )
+        else:
+            raise ValueError(
+                "Unknown decoder_selfattn_layer: " + srcattention_layer_type
+            )
+
         self.decoders = repeat(
             num_blocks,
             lambda lnum: DecoderLayer(
@@ -285,9 +358,7 @@ class TransformerDecoder(BaseTransformerDecoder):
                 MultiHeadedAttention(
                     attention_heads, attention_dim, self_attention_dropout_rate
                 ),
-                MultiHeadedAttention(
-                    attention_heads, attention_dim, src_attention_dropout_rate
-                ),
+                decoder_srcattn_layer(*decoder_srcattn_layer_args),
                 PositionwiseFeedForward(attention_dim, linear_units, dropout_rate),
                 dropout_rate,
                 normalize_before,

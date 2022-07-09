@@ -98,14 +98,14 @@ frontend_choices = ClassChoices(
 )
 specaug_choices = ClassChoices(
     name="specaug",
-    classes=dict(specaug=SpecAug,),
+    classes=dict(specaug=SpecAug),
     type_check=AbsSpecAug,
     default=None,
     optional=True,
 )
 normalize_choices = ClassChoices(
     "normalize",
-    classes=dict(global_mvn=GlobalMVN, utterance_mvn=UtteranceMVN,),
+    classes=dict(global_mvn=GlobalMVN, utterance_mvn=UtteranceMVN),
     type_check=AbsNormalize,
     default="utterance_mvn",
     optional=True,
@@ -118,7 +118,7 @@ model_choices = ClassChoices(
 )
 preencoder_choices = ClassChoices(
     name="preencoder",
-    classes=dict(sinc=LightweightSincConvs, linear=LinearProjection,),
+    classes=dict(sinc=LightweightSincConvs, linear=LinearProjection),
     type_check=AbsPreEncoder,
     default=None,
     optional=True,
@@ -142,7 +142,7 @@ encoder_choices = ClassChoices(
 )
 postencoder_choices = ClassChoices(
     name="postencoder",
-    classes=dict(hugging_face_transformers=HuggingFaceTransformersPostEncoder,),
+    classes=dict(hugging_face_transformers=HuggingFaceTransformersPostEncoder),
     type_check=AbsPostEncoder,
     default=None,
     optional=True,
@@ -326,9 +326,7 @@ class ASRTask(AbsTask):
         )
 
         # Multi-granular targets training
-        parser.add_argument(
-            "--bpemodels", type=str, action="append", default=[],
-        )
+        parser.add_argument("--bpemodels", type=str, action="append", default=[])
         parser.add_argument(
             "--token_types",
             type=str,
@@ -535,7 +533,10 @@ class ASRTask(AbsTask):
         # 5. Featurizer
         if getattr(args, "featurizer", None) is not None:
             featurizer_class = featurizer_choices.get_class(args.featurizer)
-            featurizer = featurizer_class(**args.featurizer_conf)
+            if args.featurizer == "identity":
+                featurizer = featurizer_class()
+            else:
+                featurizer = featurizer_class(**args.featurizer_conf)
         else:
             featurizer = None
 
@@ -544,13 +545,10 @@ class ASRTask(AbsTask):
 
         if args.decoder == "transducer":
             assert len(args.token_lists) == 0, args.token_list
-            decoder = decoder_class(vocab_size, embed_pad=0, **args.decoder_conf,)
+            decoder = decoder_class(vocab_size, embed_pad=0, **args.decoder_conf)
 
             joint_network = JointNetwork(
-                vocab_size,
-                encoder.output_size(),
-                decoder.dunits,
-                **args.joint_net_conf,
+                vocab_size, encoder.output_size(), decoder.dunits, **args.joint_net_conf
             )
         else:
             if len(args.token_lists) == 0:

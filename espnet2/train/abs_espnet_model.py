@@ -40,3 +40,8 @@ class AbsESPnetModel(torch.nn.Module, ABC):
     @abstractmethod
     def collect_feats(self, **batch: torch.Tensor) -> Dict[str, torch.Tensor]:
         raise NotImplementedError
+
+    def set_num_updates(self, num_updates):
+        for m in self.modules():
+            if hasattr(m, "set_num_updates") and m != self:
+                m.set_num_updates(num_updates)

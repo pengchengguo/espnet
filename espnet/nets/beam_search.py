@@ -338,7 +338,7 @@ class BeamSearch(torch.nn.Module):
         x: torch.Tensor,
         maxlenratio: float = 0.0,
         minlenratio: float = 0.0,
-        x_fusion: List[torch.Tensor] = None,
+        x_seqs: List[torch.Tensor] = None,
     ) -> List[Hypothesis]:
         """Perform beam search.
 
@@ -372,7 +372,7 @@ class BeamSearch(torch.nn.Module):
         ended_hyps = []
         for i in range(maxlen):
             logging.debug("position " + str(i))
-            best = self.search(running_hyps, x, x_fusion=x_fusion)
+            best = self.search(running_hyps, x, x_seqs=x_seqs)
             # post process of one iteration
             running_hyps = self.post_process(i, maxlen, maxlenratio, best, ended_hyps)
             # end detection
