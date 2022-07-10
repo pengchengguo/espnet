@@ -2,8 +2,7 @@
 #  Apache 2.0  (http://www.apache.org/licenses/LICENSE-2.0)
 
 """Decoder definition."""
-from typing import Any, List, Sequence, Tuple, Union
-from xml.dom import NotSupportedErr
+from typing import Any, List, Sequence, Tuple
 
 import torch
 from typeguard import check_argument_types
@@ -280,7 +279,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
                 )
             self.save_weight = torch.stack(weights_lst)
         else:
-            raise NotSupportedErr
+            raise NotImplementedError
 
 
 class TransformerDecoder(BaseTransformerDecoder):
