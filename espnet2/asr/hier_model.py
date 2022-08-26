@@ -1,6 +1,7 @@
 import logging
 from contextlib import contextmanager
 from typing import Dict, List, Optional, Tuple, Union
+import math
 
 import torch
 from packaging.version import parse as V
@@ -51,6 +52,7 @@ class HierASRModel(AbsESPnetModel):
         joint_network: Optional[torch.nn.Module],
         ctc_weight: float = 0.5,
         interctc_weight: float = 0.0,
+        sparsity_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
         length_normalized_loss: bool = False,
@@ -73,6 +75,7 @@ class HierASRModel(AbsESPnetModel):
         self.ignore_id = ignore_id
         self.ctc_weight = ctc_weight
         self.interctc_weight = interctc_weight
+        self.sparsity_weight = sparsity_weight
         self.token_list = token_list  # List[List[str]]
 
         self.frontend = frontend
@@ -237,21 +240,46 @@ class HierASRModel(AbsESPnetModel):
                 encoder_out_seqs=encoder_out_seqs,
             )
 
-            # 3. CTC-Att loss definition
-            if self.ctc_weight == 0.0:
-                loss = loss_att
-            elif self.ctc_weight == 1.0:
-                loss = loss_ctc
-            else:
-                loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
+        if self.sparsity_weight != 0:
+            # only use for gumbesoftmax multi-headed attention to compute
+            # the KL divergence between estimated selection posterior with
+            # the prior distribution
+            kl_div_lst = []
+            for layer_idx, dec_layer in enumerate(self.decoder.decoders):
+                # (n_iter, n_head_cand)
+                posterior = dec_layer.src_attn.h_samples
+                prior = dec_layer.src_attn.h_prior
+                kl_div = posterior * (torch.log(posterior + 1e-7) - math.log(prior))
+                kl_div_lst.append(kl_div)
+            # (dec_layer, n_inter, n_head_cand)
+            sparsity_loss = torch.stack(kl_div_lst, dim=0)
+            # normalize the loss by numbers of distributions
+            sparsity_loss = sparsity_loss.sum() / torch.numel(sparsity_loss)
+            # normalize the loss by batch size
+            sparsity_loss = (
+                sparsity_loss * texts_lengths[-1].sum() / texts_lengths[-1].size(0)
+            )
 
-            # Collect Attn branch stats
-            if hasattr(self.decoder.decoders[0].src_attn, "curr_temp"):
-                stats["curr_temp"] = self.decoder.decoders[0].src_attn.curr_temp
-            stats["loss_att"] = loss_att.detach() if loss_att is not None else None
-            stats["acc"] = acc_att
-            stats["cer"] = cer_att
-            stats["wer"] = wer_att
+            stats["loss_sparsity"] = sparsity_loss.detach()
+
+        # 3. CTC-Att loss definition
+        if self.ctc_weight == 0.0:
+            loss = loss_att
+        elif self.ctc_weight == 1.0:
+            loss = loss_ctc
+        else:
+            loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
+
+        if self.sparsity_weight != 0:
+            loss = loss + self.sparsity_weight * sparsity_loss
+
+        # Collect Attn branch stats
+        if hasattr(self.decoder.decoders[0].src_attn, "curr_temp"):
+            stats["curr_temp"] = self.decoder.decoders[0].src_attn.curr_temp
+        stats["loss_att"] = loss_att.detach() if loss_att is not None else None
+        stats["acc"] = acc_att
+        stats["cer"] = cer_att
+        stats["wer"] = wer_att
 
         # Collect total loss stats
         stats["loss"] = loss.detach()

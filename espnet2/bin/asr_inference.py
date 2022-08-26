@@ -294,6 +294,7 @@ class Speech2Text:
 
         # b. Forward Encoder
         enc, _ = self.asr_model.encode(**batch)
+
         inters = None
         if isinstance(enc, tuple):
             inters = enc[1]
@@ -328,7 +329,7 @@ class Speech2Text:
                 x=enc[0],
                 maxlenratio=self.maxlenratio,
                 minlenratio=self.minlenratio,
-                x_seqs=[es[0] for es in enc_seqs],
+                x_seqs=None if enc_seqs is None else [es[0] for es in enc_seqs],
             )
 
         nbest_hyps = nbest_hyps[: self.nbest]

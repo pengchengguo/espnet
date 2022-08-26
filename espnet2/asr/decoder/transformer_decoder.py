@@ -11,6 +11,9 @@ from espnet2.asr.decoder.abs_decoder import AbsDecoder
 from espnet2.asr.modules.attention import (
     WeightedSumMultiHeadedAttention,
     GumbelSoftmaxMultiHeadedAttention,
+    GumbelSoftmaxMultiHeadedAttention_V2,
+    GumbelSoftmaxMultiHeadedAttention_V3,
+    SelectedMultiHeadedAttention,
 )
 from espnet.nets.pytorch_backend.nets_utils import make_pad_mask
 from espnet.nets.pytorch_backend.transformer.attention import MultiHeadedAttention
@@ -149,6 +152,13 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         #     )
 
         x = self.embed(tgt)
+        # print(
+        #     torch.nn.functional.softmax(self.decoders[0].src_attn.h_posterior)[1]
+        #     .detach()
+        #     .cpu()
+        #     .view(-1)
+        #     .numpy()
+        # )
         for layer_idx, decoder_layer in enumerate(self.decoders):
             x, tgt_mask, memory, memory_mask = decoder_layer(
                 x,
@@ -270,7 +280,7 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
                     self.decoders[idx].src_attn.fusion_weight.cpu().detach()
                 )
             self.save_weight = torch.stack(weights_lst).squeeze(-1)
-        elif hasattr(self.decoders[0].src_attn, "h_posterior"):
+        if hasattr(self.decoders[0].src_attn, "h_posterior"):
             # for GumbelSoftmaxMultiHeadedAttention
             weights_lst = []
             for idx in range(len(self.decoders)):
@@ -278,8 +288,12 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
                     self.decoders[idx].src_attn.h_posterior.cpu().detach()
                 )
             self.save_weight = torch.stack(weights_lst)
-        else:
-            raise NotImplementedError
+        if hasattr(self.decoders[0].src_attn, "h_logit"):
+            # for SelectedMultiHeadedAttention
+            weights_lst = []
+            for idx in range(len(self.decoders)):
+                weights_lst.append(self.decoders[idx].src_attn.h_logit.cpu().detach())
+            self.save_weight = torch.stack(weights_lst)
 
 
 class TransformerDecoder(BaseTransformerDecoder):
@@ -343,6 +357,36 @@ class TransformerDecoder(BaseTransformerDecoder):
                 num_enc_seq,
                 temp,
                 combine_type,
+                src_attention_dropout_rate,
+            )
+        elif srcattention_layer_type == "gumbel_mha_v2":
+            decoder_srcattn_layer = GumbelSoftmaxMultiHeadedAttention_V2
+            decoder_srcattn_layer_args = (
+                attention_heads,
+                attention_heads_cand,
+                attention_dim,
+                num_enc_seq,
+                temp,
+                src_attention_dropout_rate,
+            )
+        elif srcattention_layer_type == "gumbel_mha_v3":
+            decoder_srcattn_layer = GumbelSoftmaxMultiHeadedAttention_V3
+            decoder_srcattn_layer_args = (
+                attention_heads,
+                attention_heads_cand,
+                attention_dim,
+                num_enc_seq,
+                temp,
+                src_attention_dropout_rate,
+            )
+        elif srcattention_layer_type == "selected_mha":
+            decoder_srcattn_layer = SelectedMultiHeadedAttention
+            decoder_srcattn_layer_args = (
+                attention_heads,
+                attention_heads_cand,
+                attention_dim,
+                num_enc_seq,
+                temp,
                 src_attention_dropout_rate,
             )
         else:

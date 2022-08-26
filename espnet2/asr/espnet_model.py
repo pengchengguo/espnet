@@ -53,6 +53,7 @@ class ESPnetASRModel(AbsESPnetModel):
         joint_network: Optional[torch.nn.Module],
         ctc_weight: float = 0.5,
         interctc_weight: float = 0.0,
+        sparsity_weight: float = 0.0,
         ignore_id: int = -1,
         lsm_weight: float = 0.0,
         length_normalized_loss: bool = False,
@@ -75,6 +76,7 @@ class ESPnetASRModel(AbsESPnetModel):
         self.ignore_id = ignore_id
         self.ctc_weight = ctc_weight
         self.interctc_weight = interctc_weight
+        self.sparsity_weight = sparsity_weight
         self.token_list = token_list.copy()
 
         self.frontend = frontend
@@ -104,7 +106,8 @@ class ESPnetASRModel(AbsESPnetModel):
             self.joint_network = joint_network
 
             self.criterion_transducer = RNNTLoss(
-                blank=self.blank_id, fastemit_lambda=0.0,
+                blank=self.blank_id,
+                fastemit_lambda=0.0,
             )
 
             if report_cer or report_wer:
@@ -245,7 +248,11 @@ class ESPnetASRModel(AbsESPnetModel):
                 loss_transducer,
                 cer_transducer,
                 wer_transducer,
-            ) = self._calc_transducer_loss(encoder_out, encoder_out_lens, text,)
+            ) = self._calc_transducer_loss(
+                encoder_out,
+                encoder_out_lens,
+                text,
+            )
 
             if loss_ctc is not None:
                 loss = loss_transducer + (self.ctc_weight * loss_ctc)
@@ -269,6 +276,16 @@ class ESPnetASRModel(AbsESPnetModel):
                     text_lengths,
                     encoder_out_fusion=encoder_out_fusion,
                 )
+
+            # if self.sparsity_weight != 0:
+            #     # only use for gumbesoftmax multi-headed attention to compute
+            #     # the KL divergence between estimated selection posterior with
+            #     # the prior distribution
+            #     sparsity_loss = []
+            #     for layer_idx, dec_layer in enumerate(self.decoder.decoders):
+            #         posterior = dec_layer.src_attn.h_posterior
+            #         sparsity = posterior * (torch.log(posterior) - torch.log(0.5))
+            #         sparsity_loss.append(sparsity)
 
             # 3. CTC-Att loss definition
             if self.ctc_weight == 0.0:
@@ -487,7 +504,11 @@ class ESPnetASRModel(AbsESPnetModel):
 
         # 1. Forward decoder
         decoder_out, _ = self.decoder(
-            encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens, encoder_out_fusion,
+            encoder_out,
+            encoder_out_lens,
+            ys_in_pad,
+            ys_in_lens,
+            encoder_out_fusion,
         )
 
         # 2. Compute attention loss
@@ -544,7 +565,10 @@ class ESPnetASRModel(AbsESPnetModel):
 
         """
         decoder_in, target, t_len, u_len = get_transducer_task_io(
-            labels, encoder_out_lens, ignore_id=self.ignore_id, blank_id=self.blank_id,
+            labels,
+            encoder_out_lens,
+            ignore_id=self.ignore_id,
+            blank_id=self.blank_id,
         )
 
         self.decoder.set_device(encoder_out.device)
@@ -554,7 +578,12 @@ class ESPnetASRModel(AbsESPnetModel):
             encoder_out.unsqueeze(2), decoder_out.unsqueeze(1)
         )
 
-        loss_transducer = self.criterion_transducer(joint_out, target, t_len, u_len,)
+        loss_transducer = self.criterion_transducer(
+            joint_out,
+            target,
+            t_len,
+            u_len,
+        )
 
         cer_transducer, wer_transducer = None, None
         if not self.training and self.error_calculator_trans is not None:
