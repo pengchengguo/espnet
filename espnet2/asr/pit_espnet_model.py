@@ -91,7 +91,7 @@ class PITLossWrapper(AbsLossWrapper):
         )  # (batch_size, num_perm)
 
         min_losses, min_ids = torch.min(losses, dim=1)
-        opt_perm = all_permutations[min_ids]  # (batch_size, num_ref)
+        opt_perm = all_permutations[min_ids.cpu()]  # (batch_size, num_ref)
 
         # Permute the inf and inf_lens according to the optimal perm
         return min_losses.mean(), opt_perm
@@ -147,7 +147,6 @@ class ESPnetASRModel(SingleESPnetASRModel):
         # Pretrained HF Tokenizer needs custom sym_sos and sym_eos
         sym_sos: str = "<sos/eos>",
         sym_eos: str = "<sos/eos>",
-        extract_feats_in_collect_stats: bool = True,
         lang_token_id: int = -1,
         # num_inf: the number of inferences (= number of outputs of the model)
         # num_ref: the number of references (= number of groundtruth seqs)
@@ -181,7 +180,6 @@ class ESPnetASRModel(SingleESPnetASRModel):
             sym_blank=sym_blank,
             sym_sos=sym_sos,
             sym_eos=sym_eos,
-            extract_feats_in_collect_stats=extract_feats_in_collect_stats,
             lang_token_id=lang_token_id,
         )
 

@@ -309,7 +309,7 @@ class Speech2Text:
 
     @torch.no_grad()
     def __call__(
-        self, speech: Union[torch.Tensor, np.ndarray]
+        self, speech: Union[torch.Tensor, np.ndarray], **kwargs,
     ) -> List[
         Tuple[
             Optional[str],
@@ -337,6 +337,16 @@ class Speech2Text:
         # lengths: (1,)
         lengths = speech.new_full([1], dtype=torch.long, fill_value=speech.size(1))
         batch = {"speech": speech, "speech_lengths": lengths}
+        if "speaker_inventory" in kwargs:
+            batch["speaker_inventory"] = kwargs["speaker_inventory"].unsqueeze(0).to(
+                getattr(torch, self.dtype),
+            )
+            batch["speaker_inventory_lengths"] = batch["speaker_inventory"].new_full(
+                [1],
+                dtype=torch.long,
+                fill_value=batch["speaker_inventory"].size(1),
+            )
+
         logging.info("speech length: " + str(speech.size(1)))
 
         # a. To device

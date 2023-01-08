@@ -143,6 +143,7 @@ class CommonPreprocessor(AbsPreprocessor):
         speech_name: str = "speech",
         text_name: str = "text",
         fs: int = 0,
+        nonsplit_symbol: Iterable[str] = None,
     ):
         super().__init__(train)
         self.train = train
@@ -165,6 +166,7 @@ class CommonPreprocessor(AbsPreprocessor):
                 space_symbol=space_symbol,
                 non_linguistic_symbols=non_linguistic_symbols,
                 g2p_type=g2p_type,
+                nonsplit_symbol=nonsplit_symbol,
             )
             self.token_id_converter = TokenIDConverter(
                 token_list=token_list,
@@ -437,6 +439,7 @@ class CommonPreprocessor_multi(CommonPreprocessor):
         speech_name: str = "speech",
         text_name: List[str] = ["text"],
         fs: int = 0,
+        speaker_change_symbol: Iterable[str] = None,
     ):
         super().__init__(
             train=train,
@@ -458,11 +461,17 @@ class CommonPreprocessor_multi(CommonPreprocessor):
             speech_volume_normalize=speech_volume_normalize,
             speech_name=speech_name,
             fs=fs,
+            nonsplit_symbol=speaker_change_symbol,
         )
         if isinstance(text_name, str):
             self.text_name = [text_name]
         else:
             self.text_name = text_name
+
+        self.speaker_change_symbol = speaker_change_symbol
+        assert (
+            speaker_change_symbol is not None or len(self.text_name) > 1
+        ), f"SOT which supports speaker_change_symbol only works with single text input."
 
     def _text_process(
         self, data: Dict[str, Union[str, np.ndarray]]
@@ -594,6 +603,16 @@ class DynamicMixingPreprocessor(AbsPreprocessor):
         speech_ref_name_prefix: str = "speech_ref",
         mixture_source_name: str = None,
         utt2spk: str = None,
+        text_name: str = None,
+        token_type: str = None,
+        token_list: Union[Path, str, Iterable[str]] = None,
+        bpemodel: Union[Path, str, Iterable[str]] = None,
+        text_cleaner: Collection[str] = None,
+        g2p_type: str = None,
+        unk_symbol: str = "<unk>",
+        space_symbol: str = "<space>",
+        non_linguistic_symbols: Union[Path, str, Iterable[str]] = None,
+        delimiter: str = None,
     ):
 
         super().__init__(train)
@@ -601,6 +620,7 @@ class DynamicMixingPreprocessor(AbsPreprocessor):
         self.ref_num = ref_num
         self.dynamic_mixing_gain_db = dynamic_mixing_gain_db
         self.speech_name = speech_name
+        self.text_name = text_name
         self.speech_ref_name_prefix = speech_ref_name_prefix
         # mixture_source_name: the key to select source utterances from dataloader
         if mixture_source_name is None:
@@ -634,6 +654,28 @@ class DynamicMixingPreprocessor(AbsPreprocessor):
                 assert key in self.utt2spk
 
         self.source_keys = list(self.sources.keys())
+
+        if token_type is not None and text_name is not None:
+            if token_list is None:
+                raise ValueError("token_list is required if token_type is not None")
+            self.text_cleaner = TextCleaner(text_cleaner)
+
+            self.tokenizer = build_tokenizer(
+                token_type=token_type,
+                bpemodel=bpemodel,
+                delimiter=delimiter,
+                space_symbol=space_symbol,
+                non_linguistic_symbols=non_linguistic_symbols,
+                g2p_type=g2p_type,
+            )
+            self.token_id_converter = TokenIDConverter(
+                token_list=token_list,
+                unk_symbol=unk_symbol,
+            )
+        else:
+            self.text_cleaner = None
+            self.tokenizer = None
+            self.token_id_converter = None
 
     def _pick_source_utterances_(self, uid):
         # return (ref_num - 1) uid of reference sources.
@@ -681,7 +723,7 @@ class DynamicMixingPreprocessor(AbsPreprocessor):
 
         return source
 
-    def _mix_speech_(self, uid, data):
+    def _speech_process(self, uid, data) -> Dict[str, np.ndarray]:
 
         # pick sources
         source_keys = self._pick_source_utterances_(uid)
@@ -707,11 +749,29 @@ class DynamicMixingPreprocessor(AbsPreprocessor):
             data[f"{self.speech_ref_name_prefix}{i+1}"] = ref
         data[self.speech_name] = speech_mix
 
+        assert check_return_type(data)
+        return data
+
+    def _text_process(
+        self, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        if (
+            self.text_name is not None
+            and self.text_name in data
+            and self.tokenizer is not None
+        ):
+            text = data[self.text_name]
+            text = self.text_cleaner(text)
+            tokens = self.tokenizer.text2tokens(text)
+            text_ints = self.token_id_converter.tokens2ids(tokens)
+            data[self.text_name] = np.array(text_ints, dtype=np.int64)
+        assert check_return_type(data)
         return data
 
     def __call__(
         self, uid: str, data: Dict[str, Union[str, np.ndarray]]
     ) -> Dict[str, np.ndarray]:
+        assert check_argument_types()
 
         # TODO(Chenda): need to test for multi-channel data.
         assert (
@@ -719,9 +779,9 @@ class DynamicMixingPreprocessor(AbsPreprocessor):
         ), "Multi-channel input has not been tested"
 
         if self.train:
-            data = self._mix_speech_(uid, data)
+            data = self._speech_process(uid, data)
+            data = self._text_process(uid, data)
 
-        assert check_return_type(data)
         return data
 
 

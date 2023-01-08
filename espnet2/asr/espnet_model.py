@@ -50,6 +50,8 @@ class ESPnetASRModel(AbsESPnetModel):
         decoder: AbsDecoder,
         ctc: CTC,
         joint_network: Optional[torch.nn.Module],
+        aux_preencoder: Optional[AbsPreEncoder] = None,
+        aux_encoder: Optional[AbsEncoder] = None,
         ctc_weight: float = 0.5,
         interctc_weight: float = 0.0,
         ignore_id: int = -1,
@@ -63,7 +65,6 @@ class ESPnetASRModel(AbsESPnetModel):
         # Pretrained HF Tokenizer needs custom sym_sos and sym_eos
         sym_sos: str = "<sos/eos>",
         sym_eos: str = "<sos/eos>",
-        extract_feats_in_collect_stats: bool = True,
         lang_token_id: int = -1,
     ):
         assert check_argument_types()
@@ -90,8 +91,10 @@ class ESPnetASRModel(AbsESPnetModel):
         self.specaug = specaug
         self.normalize = normalize
         self.preencoder = preencoder
+        self.aux_preencoder = aux_preencoder
         self.postencoder = postencoder
         self.encoder = encoder
+        self.aux_encoder = aux_encoder
 
         if not hasattr(self.encoder, "interctc_use_conditioning"):
             self.encoder.interctc_use_conditioning = False
@@ -159,8 +162,6 @@ class ESPnetASRModel(AbsESPnetModel):
         else:
             self.ctc = ctc
 
-        self.extract_feats_in_collect_stats = extract_feats_in_collect_stats
-
         if lang_token_id != -1:
             self.lang_token_id = torch.tensor([[lang_token_id]])
         else:
@@ -199,11 +200,19 @@ class ESPnetASRModel(AbsESPnetModel):
         text = text[:, : text_lengths.max()]
 
         # 1. Encoder
-        encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
+        encoder_out, encoder_out_lens = self.encode(speech, speech_lengths, **kwargs)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
             intermediate_outs = encoder_out[1]
             encoder_out = encoder_out[0]
+
+        # 1.1. Aux_Encoder
+        att_dec_others = {}
+        if getattr(self, "aux_encoder", None) is not None:
+            aux_encoder_out, aux_encoder_out_lens, _ = self.aux_encoder(kwargs["speaker_inventory"], kwargs["speaker_inventory_lengths"])
+            att_dec_others["aux_encoder_out"] = aux_encoder_out
+            att_dec_others["aux_encoder_out_lens"] = aux_encoder_out_lens
+
 
         loss_att, acc_att, cer_att, wer_att = None, None, None, None
         loss_ctc, cer_ctc = None, None
@@ -272,7 +281,7 @@ class ESPnetASRModel(AbsESPnetModel):
             # 2b. Attention decoder branch
             if self.ctc_weight != 1.0:
                 loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-                    encoder_out, encoder_out_lens, text, text_lengths
+                    encoder_out, encoder_out_lens, text, text_lengths, att_dec_others,
                 )
 
             # 3. CTC-Att loss definition
@@ -304,20 +313,11 @@ class ESPnetASRModel(AbsESPnetModel):
         text_lengths: torch.Tensor,
         **kwargs,
     ) -> Dict[str, torch.Tensor]:
-        if self.extract_feats_in_collect_stats:
-            feats, feats_lengths = self._extract_feats(speech, speech_lengths)
-        else:
-            # Generate dummy stats if extract_feats_in_collect_stats is False
-            logging.warning(
-                "Generating dummy stats for feats and feats_lengths, "
-                "because encoder_conf.extract_feats_in_collect_stats is "
-                f"{self.extract_feats_in_collect_stats}"
-            )
-            feats, feats_lengths = speech, speech_lengths
+        feats, feats_lengths = self._extract_feats(speech, speech_lengths)
         return {"feats": feats, "feats_lengths": feats_lengths}
 
     def encode(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor
+        self, speech: torch.Tensor, speech_lengths: torch.Tensor, **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_inference.py
 
@@ -341,6 +341,16 @@ class ESPnetASRModel(AbsESPnetModel):
         if self.preencoder is not None:
             feats, feats_lengths = self.preencoder(feats, feats_lengths)
 
+        enc_others = {}
+        if self.aux_preencoder is not None:
+            assert "speaker_inventory" in kwargs
+            speaker_feats, speaker_feats_lengths = self.aux_preencoder(
+                kwargs["speaker_inventory"],
+                kwargs["speaker_inventory_lengths"],
+            )
+            enc_others["speaker_feats"] = speaker_feats
+            enc_others["speaker_feats_lengths"] = speaker_feats_lengths
+
         # 4. Forward encoder
         # feats: (Batch, Length, Dim)
         # -> encoder_out: (Batch, Length2, Dim2)
@@ -349,7 +359,7 @@ class ESPnetASRModel(AbsESPnetModel):
                 feats, feats_lengths, ctc=self.ctc
             )
         else:
-            encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths)
+            encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths, **enc_others)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
             intermediate_outs = encoder_out[1]
@@ -485,6 +495,7 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
+        others: Dict[str, torch.Tensor]=dict(),
     ):
         if hasattr(self, "lang_token_id") and self.lang_token_id is not None:
             ys_pad = torch.cat(
@@ -501,7 +512,7 @@ class ESPnetASRModel(AbsESPnetModel):
 
         # 1. Forward decoder
         decoder_out, _ = self.decoder(
-            encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens
+            encoder_out, encoder_out_lens, ys_in_pad, ys_in_lens, **others,
         )
 
         # 2. Compute attention loss

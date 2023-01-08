@@ -440,6 +440,12 @@ class AbsTask(ABC):
             default=False,
             help='Write the output features from the model when "collect stats" mode',
         )
+        group.add_argument(
+            "--only_collect_shape_info",
+            type=str2bool,
+            default=False,
+            help="only collect the shape information without stats when 'collect stats' mode",
+        )
 
         group = parser.add_argument_group("Trainer related")
         group.add_argument(
@@ -1221,6 +1227,7 @@ class AbsTask(ABC):
                 ngpu=args.ngpu,
                 log_interval=args.log_interval,
                 write_collected_feats=args.write_collected_feats,
+                only_collect_shape_info=args.only_collect_shape_info,
             )
         else:
             # 6. Loads pre-trained model

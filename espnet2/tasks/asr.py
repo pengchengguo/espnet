@@ -1,4 +1,5 @@
 import argparse
+import copy
 import logging
 from typing import Callable, Collection, Dict, List, Optional, Tuple
 
@@ -20,6 +21,7 @@ from espnet2.asr.decoder.transformer_decoder import (
     LightweightConvolution2DTransformerDecoder,
     LightweightConvolutionTransformerDecoder,
     TransformerDecoder,
+    TransformerDecoderAddSpeakerEmbedding,
 )
 from espnet2.asr.encoder.abs_encoder import AbsEncoder
 from espnet2.asr.encoder.branchformer_encoder import BranchformerEncoder
@@ -37,6 +39,7 @@ from espnet2.asr.encoder.hubert_encoder import (
 from espnet2.asr.encoder.longformer_encoder import LongformerEncoder
 from espnet2.asr.encoder.rnn_encoder import RNNEncoder
 from espnet2.asr.encoder.transformer_encoder import TransformerEncoder
+from espnet2.asr.encoder.transformer_encoder_concat_speaker_embed import TransformerEncoderConcatSpeakerEmbed
 from espnet2.asr.encoder.transformer_encoder_multispkr import (
     TransformerEncoder as TransformerEncoderMultiSpkr,
 )
@@ -129,12 +132,15 @@ preencoder_choices = ClassChoices(
     default=None,
     optional=True,
 )
+aux_preencoder_choices = copy.deepcopy(preencoder_choices)
+aux_preencoder_choices.name = "aux_preencoder"
 encoder_choices = ClassChoices(
     "encoder",
     classes=dict(
         conformer=ConformerEncoder,
         transformer=TransformerEncoder,
         transformer_multispkr=TransformerEncoderMultiSpkr,
+        transformer_concat_speaker_embed=TransformerEncoderConcatSpeakerEmbed,
         contextual_block_transformer=ContextualBlockTransformerEncoder,
         contextual_block_conformer=ContextualBlockConformerEncoder,
         vgg_rnn=VGGRNNEncoder,
@@ -148,6 +154,10 @@ encoder_choices = ClassChoices(
     type_check=AbsEncoder,
     default="rnn",
 )
+aux_encoder_choices = copy.deepcopy(encoder_choices)
+aux_encoder_choices.name = "aux_encoder"
+aux_encoder_choices.default = None
+aux_encoder_choices.optional = True
 postencoder_choices = ClassChoices(
     name="postencoder",
     classes=dict(
@@ -169,6 +179,7 @@ decoder_choices = ClassChoices(
         transducer=TransducerDecoder,
         mlm=MLMDecoder,
         hugging_face_transformers=HuggingFaceTransformersDecoder,
+        transformer_add_speaker_emb=TransformerDecoderAddSpeakerEmbedding,
     ),
     type_check=AbsDecoder,
     default="rnn",
@@ -198,10 +209,14 @@ class ASRTask(AbsTask):
         normalize_choices,
         # --model and --model_conf
         model_choices,
+        # --aux_preencoder and --aux_preencoder_conf
+        aux_preencoder_choices,
         # --preencoder and --preencoder_conf
         preencoder_choices,
         # --encoder and --encoder_conf
         encoder_choices,
+        # --aux_encoder and --aux_encoder_conf
+        aux_encoder_choices,
         # --postencoder and --postencoder_conf
         postencoder_choices,
         # --decoder and --decoder_conf
@@ -449,6 +464,8 @@ class ASRTask(AbsTask):
         vocab_size = len(token_list)
         logging.info(f"Vocabulary size: {vocab_size }")
 
+        additional_model_args = dict()
+
         # 1. frontend
         if args.input_size is None:
             # Extract features in the model
@@ -484,12 +501,27 @@ class ASRTask(AbsTask):
             input_size = preencoder.output_size()
         else:
             preencoder = None
+        # 4.1 Auxiliary Pre-encoder input block
+        if getattr(args, "aux_preencoder", None) is not None:
+            aux_preencoder_class = aux_preencoder_choices.get_class(args.aux_preencoder)
+            aux_preencoder = aux_preencoder_class(
+                output_size=args.encoder_conf["output_size"],
+                **args.aux_preencoder_conf,
+            )
+            additional_model_args["aux_preencoder"] = aux_preencoder
 
-        # 4. Encoder
+        # 5. Encoder
         encoder_class = encoder_choices.get_class(args.encoder)
         encoder = encoder_class(input_size=input_size, **args.encoder_conf)
+        # 5.1. Aux_Encoder
+        if getattr(args, "aux_encoder", None) is not None:
+            aux_encoder_class = aux_encoder_choices.get_class(args.aux_encoder)
+            aux_encoder = aux_encoder_class(**args.aux_encoder_conf)
+            aux_encoder_output_size = aux_encoder.output_size()
+            args.decoder_conf["aux_encoder_output_size"] = aux_encoder_output_size
+            additional_model_args["aux_encoder"] = aux_encoder
 
-        # 5. Post-encoder block
+        # 6. Post-encoder block
         # NOTE(kan-bayashi): Use getattr to keep the compatibility
         encoder_output_size = encoder.output_size()
         if getattr(args, "postencoder", None) is not None:
@@ -501,7 +533,7 @@ class ASRTask(AbsTask):
         else:
             postencoder = None
 
-        # 5. Decoder
+        # 7. Decoder
         decoder_class = decoder_choices.get_class(args.decoder)
 
         if args.decoder == "transducer":
@@ -526,12 +558,12 @@ class ASRTask(AbsTask):
 
             joint_network = None
 
-        # 6. CTC
+        # 8. CTC
         ctc = CTC(
             odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
         )
 
-        # 7. Build model
+        # 9. Build model
         try:
             model_class = model_choices.get_class(args.model)
         except AttributeError:
@@ -549,10 +581,11 @@ class ASRTask(AbsTask):
             joint_network=joint_network,
             token_list=token_list,
             **args.model_conf,
+            **additional_model_args,
         )
 
         # FIXME(kamo): Should be done in model?
-        # 8. Initialize
+        # 10. Initialize
         if args.init is not None:
             initialize(model, args.init)
 

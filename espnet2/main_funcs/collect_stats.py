@@ -25,6 +25,7 @@ def collect_stats(
     ngpu: Optional[int],
     log_interval: Optional[int],
     write_collected_feats: bool,
+    only_collect_shape_info: bool,
 ) -> None:
     """Perform on collect_stats mode.
 
@@ -64,54 +65,56 @@ def collect_stats(
                         )
 
                 # 2. Extract feats
-                if ngpu <= 1:
-                    data = model.collect_feats(**batch)
-                else:
-                    # Note that data_parallel can parallelize only "forward()"
-                    data = data_parallel(
-                        ForwardAdaptor(model, "collect_feats"),
-                        (),
-                        range(ngpu),
-                        module_kwargs=batch,
-                    )
+                if not only_collect_shape_info:
+                    if ngpu <= 1:
+                        data = model.collect_feats(**batch)
+                    else:
+                        # Note that data_parallel can parallelize only "forward()"
+                        data = data_parallel(
+                            ForwardAdaptor(model, "collect_feats"),
+                            (),
+                            range(ngpu),
+                            module_kwargs=batch,
+                        )
 
-                # 3. Calculate sum and square sum
-                for key, v in data.items():
-                    for i, (uttid, seq) in enumerate(zip(keys, v.cpu().numpy())):
-                        # Truncate zero-padding region
-                        if f"{key}_lengths" in data:
-                            length = data[f"{key}_lengths"][i]
-                            # seq: (Length, Dim, ...)
-                            seq = seq[:length]
-                        else:
-                            # seq: (Dim, ...) -> (1, Dim, ...)
-                            seq = seq[None]
-                        # Accumulate value, its square, and count
-                        sum_dict[key] += seq.sum(0)
-                        sq_dict[key] += (seq**2).sum(0)
-                        count_dict[key] += len(seq)
+                    # 3. Calculate sum and square sum
+                    for key, v in data.items():
+                        for i, (uttid, seq) in enumerate(zip(keys, v.cpu().numpy())):
+                            # Truncate zero-padding region
+                            if f"{key}_lengths" in data:
+                                length = data[f"{key}_lengths"][i]
+                                # seq: (Length, Dim, ...)
+                                seq = seq[:length]
+                            else:
+                                # seq: (Dim, ...) -> (1, Dim, ...)
+                                seq = seq[None]
+                            # Accumulate value, its square, and count
+                            sum_dict[key] += seq.sum(0)
+                            sq_dict[key] += (seq**2).sum(0)
+                            count_dict[key] += len(seq)
 
-                        # 4. [Option] Write derived features as npy format file.
-                        if write_collected_feats:
-                            # Instantiate NpyScpWriter for the first iteration
-                            if (key, mode) not in npy_scp_writers:
-                                p = output_dir / mode / "collect_feats"
-                                npy_scp_writers[(key, mode)] = NpyScpWriter(
-                                    p / f"data_{key}", p / f"{key}.scp"
-                                )
-                            # Save array as npy file
-                            npy_scp_writers[(key, mode)][uttid] = seq
+                            # 4. [Option] Write derived features as npy format file.
+                            if write_collected_feats:
+                                # Instantiate NpyScpWriter for the first iteration
+                                if (key, mode) not in npy_scp_writers:
+                                    p = output_dir / mode / "collect_feats"
+                                    npy_scp_writers[(key, mode)] = NpyScpWriter(
+                                        p / f"data_{key}", p / f"{key}.scp"
+                                    )
+                                # Save array as npy file
+                                npy_scp_writers[(key, mode)][uttid] = seq
 
                 if iiter % log_interval == 0:
                     logging.info(f"Niter: {iiter}")
 
-        for key in sum_dict:
-            np.savez(
-                output_dir / mode / f"{key}_stats.npz",
-                count=count_dict[key],
-                sum=sum_dict[key],
-                sum_square=sq_dict[key],
-            )
+        if not only_collect_shape_info:
+            for key in sum_dict:
+                np.savez(
+                    output_dir / mode / f"{key}_stats.npz",
+                    count=count_dict[key],
+                    sum=sum_dict[key],
+                    sum_square=sq_dict[key],
+                )
 
         # batch_keys and stats_keys are used by aggregate_stats_dirs.py
         with (output_dir / mode / "batch_keys").open("w", encoding="utf-8") as f:
