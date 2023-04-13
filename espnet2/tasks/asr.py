@@ -39,7 +39,9 @@ from espnet2.asr.encoder.hubert_encoder import (
 from espnet2.asr.encoder.longformer_encoder import LongformerEncoder
 from espnet2.asr.encoder.rnn_encoder import RNNEncoder
 from espnet2.asr.encoder.transformer_encoder import TransformerEncoder
-from espnet2.asr.encoder.transformer_encoder_concat_speaker_embed import TransformerEncoderConcatSpeakerEmbed
+from espnet2.asr.encoder.transformer_encoder_concat_speaker_embed import (
+    TransformerEncoderConcatSpeakerEmbed,
+)
 from espnet2.asr.encoder.transformer_encoder_multispkr import (
     TransformerEncoder as TransformerEncoderMultiSpkr,
 )

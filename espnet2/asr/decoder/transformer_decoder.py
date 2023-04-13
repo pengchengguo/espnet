@@ -55,12 +55,15 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         positional_dropout_rate: float = 0.1,
         input_layer: str = "embed",
         use_output_layer: bool = True,
+        use_aux_lstm_layer: bool = False,
+        aux_lstm_layer_size: int = 512,
         pos_enc_class=PositionalEncoding,
         normalize_before: bool = True,
     ):
         assert check_argument_types()
         super().__init__()
         attention_dim = encoder_output_size
+        output_layer_size = attention_dim
 
         if input_layer == "embed":
             self.embed = torch.nn.Sequential(
@@ -81,8 +84,21 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         self.normalize_before = normalize_before
         if self.normalize_before:
             self.after_norm = LayerNorm(attention_dim)
+
+        if use_aux_lstm_layer:
+            self.aux_lstm_layer = torch.nn.LSTM(
+                input_size=attention_dim,
+                hidden_size=aux_lstm_layer_size,
+                num_layers=1,
+                batch_first=True,
+                bidirectional=False,
+            )
+            output_layer_size = aux_lstm_layer_size
+        else:
+            self.aux_lstm_layer = None
+
         if use_output_layer:
-            self.output_layer = torch.nn.Linear(attention_dim, vocab_size)
+            self.output_layer = torch.nn.Linear(output_layer_size, vocab_size)
         else:
             self.output_layer = None
 
@@ -138,6 +154,10 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
         )
         if self.normalize_before:
             x = self.after_norm(x)
+
+        if self.aux_lstm_layer is not None:
+            x, (h_n, c_n) = self.aux_lstm_layer(x)
+
         if self.output_layer is not None:
             x = self.output_layer(x)
 
@@ -174,10 +194,18 @@ class BaseTransformerDecoder(AbsDecoder, BatchScorerInterface):
             )
             new_cache.append(x)
 
+        # if self.normalize_before:
+        #     y = self.after_norm(x[:, -1])
+        # else:
+        #     y = x[:, -1]
+
         if self.normalize_before:
-            y = self.after_norm(x[:, -1])
-        else:
-            y = x[:, -1]
+            x = self.after_norm(x)
+
+        if self.aux_lstm_layer is not None:
+            x, _ = self.aux_lstm_layer(x)
+
+        y = x[:, -1]  # only the last step is needed
         if self.output_layer is not None:
             y = torch.log_softmax(self.output_layer(y), dim=-1)
 
@@ -243,6 +271,8 @@ class TransformerDecoder(BaseTransformerDecoder):
         src_attention_dropout_rate: float = 0.0,
         input_layer: str = "embed",
         use_output_layer: bool = True,
+        use_aux_lstm_layer: bool = False,
+        aux_lstm_layer_size: int = 512,
         pos_enc_class=PositionalEncoding,
         normalize_before: bool = True,
         concat_after: bool = False,
@@ -255,6 +285,8 @@ class TransformerDecoder(BaseTransformerDecoder):
             positional_dropout_rate=positional_dropout_rate,
             input_layer=input_layer,
             use_output_layer=use_output_layer,
+            use_aux_lstm_layer=use_aux_lstm_layer,
+            aux_lstm_layer_size=aux_lstm_layer_size,
             pos_enc_class=pos_enc_class,
             normalize_before=normalize_before,
         )
@@ -524,6 +556,7 @@ class DynamicConvolution2DTransformerDecoder(BaseTransformerDecoder):
                 concat_after,
             ),
         )
+
 
 class TransformerDecoderAddSpeakerEmbedding(BaseTransformerDecoder):
     def __init__(
