@@ -1,7 +1,7 @@
 import logging
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -18,7 +18,7 @@ from espnet2.train.abs_espnet_model import AbsESPnetModel
 
 @torch.no_grad()
 def collect_stats(
-    model: AbsESPnetModel,
+    model: Union[AbsESPnetModel, None],
     train_iter: DataLoader and Iterable[Tuple[List[str], Dict[str, torch.Tensor]]],
     valid_iter: DataLoader and Iterable[Tuple[List[str], Dict[str, torch.Tensor]]],
     output_dir: Path,
@@ -64,8 +64,8 @@ def collect_stats(
                             map(str, data.shape)
                         )
 
-                # 2. Extract feats
-                if not only_collect_shape_info:
+                if model is not None:
+                    # 2. Extract feats
                     if ngpu <= 1:
                         data = model.collect_feats(**batch)
                     else:

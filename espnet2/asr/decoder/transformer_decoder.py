@@ -276,6 +276,7 @@ class TransformerDecoder(BaseTransformerDecoder):
         pos_enc_class=PositionalEncoding,
         normalize_before: bool = True,
         concat_after: bool = False,
+        layer_drop_rate: float = 0.0,
     ):
         assert check_argument_types()
         super().__init__(
@@ -307,6 +308,7 @@ class TransformerDecoder(BaseTransformerDecoder):
                 normalize_before,
                 concat_after,
             ),
+            layer_drop_rate,
         )
 
 

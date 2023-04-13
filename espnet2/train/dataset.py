@@ -21,18 +21,15 @@ from espnet2.fileio.rand_gen_dataset import (
     IntRandomGenerateDataset,
 )
 from espnet2.fileio.read_text import (
+    RandomTextReader,
     load_num_sequence_text,
-    read_2column_text,
+    read_2columns_text,
     read_label,
 )
 from espnet2.fileio.rttm import RttmReader
+from espnet2.fileio.score_scp import SingingScoreReader
 from espnet2.fileio.sound_scp import SoundScpReader
 from espnet2.utils.sized_dict import SizedDict
-
-try:
-    from espnet2.fileio.xml_scp import XMLScpReader
-except ImportError or ModuleNotFoundError:
-    XMLScpReader = None  # cannot load XML reader, need instal Muskit
 
 
 class AdapterForSoundScpReader(collections.abc.Mapping):
@@ -107,7 +104,7 @@ class H5FileWrapper:
         return value[()]
 
 
-class AdapterForXMLScpReader(collections.abc.Mapping):
+class AdapterForSingingScoreScpReader(collections.abc.Mapping):
     def __init__(self, loader):
         assert check_argument_types()
         self.loader = loader
@@ -123,32 +120,14 @@ class AdapterForXMLScpReader(collections.abc.Mapping):
 
     def __getitem__(self, key: str) -> np.ndarray:
         retval = self.loader[key]
-
-        assert len(retval) == 4, len(retval)
-        if (
-            isinstance(retval[0], list)
-            and isinstance(retval[1], np.ndarray)
-            and isinstance(retval[2], np.ndarray)
-            and isinstance(retval[3], float)
-        ):
-            lyrics, notes, segs, tempo = retval
-        else:
-            raise RuntimeError(
-                "Unexpected type: {}, {}, {}, {}".format(
-                    type(retval[0]),
-                    type(retval[1]),
-                    type(retval[2]),
-                    type(retval[3]),
-                )
-            )
-
         assert (
-            isinstance(lyrics, list)
-            and isinstance(notes, np.ndarray)
-            and isinstance(segs, np.ndarray)
-            and isinstance(tempo, float)
+            len(retval) == 3
+            and isinstance(retval["tempo"], int)
+            and isinstance(retval["note"], list)
         )
-        return lyrics, notes, segs, tempo
+        tempo = retval["tempo"]
+
+        return tempo, retval["note"]
 
 
 class AdapterForLabelScpReader(collections.abc.Mapping):
@@ -181,7 +160,7 @@ class AdapterForLabelScpReader(collections.abc.Mapping):
         return sample_time, sample_label
 
 
-def sound_loader(path, float_dtype=None):
+def sound_loader(path, float_dtype=None, multi_columns=False):
     # The file is as follows:
     #   utterance_id_A /some/where/a.wav
     #   utterance_id_B /some/where/a.flac
@@ -189,37 +168,26 @@ def sound_loader(path, float_dtype=None):
     # NOTE(kamo): SoundScpReader doesn't support pipe-fashion
     # like Kaldi e.g. "cat a.wav |".
     # NOTE(kamo): The audio signal is normalized to [-1,1] range.
-    loader = SoundScpReader(path, normalize=True, always_2d=False)
+    loader = SoundScpReader(
+        path, always_2d=False, dtype=float_dtype, multi_columns=multi_columns
+    )
 
     # SoundScpReader.__getitem__() returns Tuple[int, ndarray],
     # but ndarray is desired, so Adapter class is inserted here
-    return AdapterForSoundScpReader(loader, float_dtype)
+    return AdapterForSoundScpReader(loader)
 
 
-def xml_loader(path, float_dtype=None):
-    # The file is as follows:
-    #   utterance_id_A /some/where/a.mid
-    #   utterance_id_B /some/where/b.midi
-
-    assert XMLScpReader is not None, (
-        "Cannot load XMLScpReader. ",
-        "Please install Muskit modules via ",
-        "(cd tools && make muskit.done)",
-    )
-    loader = XMLScpReader(fname=path)
-
-    # MIDIScpReader.__getitem__() returns ndarray
-    return AdapterForXMLScpReader(loader)
+def multi_columns_sound_loader(path, float_dtype=None):
+    return sound_loader(path, float_dtype, multi_columns=True)
 
 
-def label_loader(path, float_dtype=None):
-    # The file is as follows:
-    #   utterance_id_A /some/where/a.lab
-    #   utterance_id_B /some/where/b.lab
+def score_loader(path):
+    loader = SingingScoreReader(fname=path)
+    return AdapterForSingingScoreScpReader(loader)
 
+
+def label_loader(path):
     loader = read_label(path)
-
-    # XMLScpReader.__getitem__() returns ndarray
     return AdapterForLabelScpReader(loader)
 
 
@@ -247,13 +215,24 @@ DATA_TYPES = {
         "   utterance_id_b b.wav\n"
         "   ...",
     ),
-    "midi": dict(
-        func=xml_loader,
+    "multi_columns_sound": dict(
+        func=multi_columns_sound_loader,
         kwargs=["float_dtype"],
-        help="MIDI format types which supported by sndfile mid, midi, etc."
+        help="Enable multi columns wav.scp. "
+        "The following text file can be loaded as multi channels audio data"
         "\n\n"
-        "   utterance_id_a a.mid\n"
-        "   utterance_id_b b.mid\n"
+        "   utterance_id_a a.wav a2.wav\n"
+        "   utterance_id_b b.wav b2.wav\n"
+        "   ...",
+    ),
+    "score": dict(
+        func=score_loader,
+        kwargs=[],
+        help="Return text as is. The text contains tempo and note info.\n"
+        "For each note, 'start' 'end' 'syllabel' 'midi' and 'phones' are included. "
+        "\n\n"
+        "   utterance_id_A tempo_a start_1 end_1 syllable_1 midi_1 phones_1 ...\n"
+        "   utterance_id_B tempo_b start_1 end_1 syllable_1 midi_1 phones_1 ...\n"
         "   ...",
     ),
     "duration": dict(
@@ -325,13 +304,23 @@ DATA_TYPES = {
         "   ...",
     ),
     "text": dict(
-        func=read_2column_text,
+        func=read_2columns_text,
         kwargs=[],
         help="Return text as is. The text must be converted to ndarray "
         "by 'preprocess'."
         "\n\n"
         "   utterance_id_A hello world\n"
         "   utterance_id_B foo bar\n"
+        "   ...",
+    ),
+    "random_text": dict(
+        func=RandomTextReader,
+        kwargs=[],
+        help="Return text as is. The text must be converted to ndarray "
+        "by 'preprocess'."
+        "\n\n"
+        "   hello world\n"
+        "   foo bar\n"
         "   ...",
     ),
     "hdf5": dict(
@@ -522,7 +511,6 @@ class ESPnetDataset(AbsDataset):
         for name, loader in self.loader_dict.items():
             try:
                 value = loader[uid]
-                # TODO(Yuning): svs returns tuple, remove "tuple" temporarily
                 if isinstance(value, (list)):
                     value = np.array(value)
                 if not isinstance(

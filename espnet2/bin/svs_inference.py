@@ -16,12 +16,15 @@ import torch
 from typeguard import check_argument_types
 
 from espnet2.fileio.npy_scp import NpyScpWriter
+from espnet2.gan_svs.vits import VITS
 from espnet2.tasks.svs import SVSTask
 from espnet2.torch_utils.device_funcs import to_device
 from espnet2.torch_utils.set_all_random_seed import set_all_random_seed
 from espnet2.utils import config_argparse
 from espnet2.utils.types import str2bool, str2triple_str, str_or_none
 from espnet.utils.cli_utils import get_commandline_args
+
+# from espnet2.tts.utils import DurationCalculator
 
 
 class SingingGenerate:
@@ -39,14 +42,19 @@ class SingingGenerate:
         train_config: Optional[Union[Path, str]],
         model_file: Optional[Union[Path, str]] = None,
         use_teacher_forcing: bool = False,
+        noise_scale: float = 0.667,
+        noise_scale_dur: float = 0.8,
         vocoder_config: Union[Path, str] = None,
         vocoder_checkpoint: Union[Path, str] = None,
         dtype: str = "float32",
         device: str = "cpu",
         seed: int = 777,
+        always_fix_seed: bool = False,
+        prefer_normalized_feats: bool = False,
     ):
         assert check_argument_types()
 
+        # setup model
         model, train_args = SVSTask.build_model_from_file(
             train_config, model_file, device
         )
@@ -61,8 +69,10 @@ class SingingGenerate:
         # self.duration_calculator = DurationCalculator() # TODO(Yuning)
         self.preprocess_fn = SVSTask.build_preprocess_fn(train_args, False)
         self.use_teacher_forcing = use_teacher_forcing
-
+        self.seed = seed
+        self.always_fix_seed = always_fix_seed
         self.vocoder = None
+        self.prefer_normalized_feats = prefer_normalized_feats
         if vocoder_checkpoint is not None:
             vocoder = SVSTask.build_vocoder_from_file(
                 vocoder_config, vocoder_checkpoint, model, device
@@ -74,30 +84,35 @@ class SingingGenerate:
         logging.info(f"Extractor:\n{self.feats_extract}")
         logging.info(f"Normalizer:\n{self.normalize}")
         logging.info(f"SVS:\n{self.svs}")
+        if self.vocoder is not None:
+            logging.info(f"Vocoder:\n{self.vocoder}")
 
-        decode_config = {}
-        decode_config.update({"use_teacher_forcing": use_teacher_forcing})
-
-        self.decode_config = decode_config
+        # setup decoding config
+        decode_conf = {}
+        decode_conf.update({"use_teacher_forcing": use_teacher_forcing})
+        if isinstance(self.svs, VITS):
+            decode_conf.update(
+                noise_scale=noise_scale,
+                noise_scale_dur=noise_scale_dur,
+            )
+        self.decode_conf = decode_conf
 
     @torch.no_grad()
     def __call__(
         self,
-        text: torch.Tensor,
-        singing: torch.Tensor = None,
-        label_lab: Optional[torch.Tensor] = None,
-        midi_lab: Optional[torch.Tensor] = None,
-        tempo_lab: Optional[torch.Tensor] = None,
-        beat_lab: Optional[torch.Tensor] = None,
-        label_xml: Optional[torch.Tensor] = None,
-        midi_xml: Optional[torch.Tensor] = None,
-        tempo_xml: Optional[torch.Tensor] = None,
-        beat_xml: Optional[torch.Tensor] = None,
-        pitch: Optional[torch.Tensor] = None,
-        energy: Optional[torch.Tensor] = None,
+        text: Union[Dict[str, Tuple], torch.Tensor, np.ndarray],
+        singing: Union[torch.Tensor, np.ndarray] = None,
+        label: Union[torch.Tensor, np.ndarray] = None,
+        midi: Union[torch.Tensor, np.ndarray] = None,
+        duration_phn: Union[torch.Tensor, np.ndarray] = None,
+        duration_ruled_phn: Union[torch.Tensor, np.ndarray] = None,
+        duration_syb: Union[torch.Tensor, np.ndarray] = None,
+        phn_cnt: Union[torch.Tensor, np.ndarray] = None,
+        pitch: Union[torch.Tensor, np.ndarray] = None,
+        energy: Union[torch.Tensor, np.ndarray] = None,
         spembs: Union[torch.Tensor, np.ndarray] = None,
-        sids: Optional[torch.Tensor] = None,
-        lids: Optional[torch.Tensor] = None,
+        sids: Union[torch.Tensor, np.ndarray] = None,
+        lids: Union[torch.Tensor, np.ndarray] = None,
         decode_conf: Optional[Dict[str, Any]] = None,
     ):
         assert check_argument_types()
@@ -110,27 +125,35 @@ class SingingGenerate:
         if self.use_spembs and spembs is None:
             raise RuntimeError("Missing required argument: 'spembs'")
 
-        batch = dict(
-            text=text,
-        )
-        if label_lab is not None:
-            batch.update(label_lab=label_lab)
-        if label_xml is not None:
-            batch.update(label_xml=label_xml)
-        if midi_lab is not None:
-            batch.update(midi_lab=midi_lab)
-        if midi_xml is not None:
-            batch.update(midi_xml=midi_xml)
+        # prepare batch
+        if isinstance(text, Dict):
+            data = self.preprocess_fn(
+                "<dummy>", dict(label=text["label"], score=text["score"])
+            )
+            label = data["label"]
+            midi = data["midi"]
+            duration_phn = data["duration_phn"]
+            duration_ruled_phn = data["duration_ruled_phn"]
+            duration_syb = data["duration_syb"]
+            phn_cnt = data["phn_cnt"]
+            batch = dict(text=data["label"])
+        else:
+            batch = dict(text=text)
+
+        if label is not None:
+            batch.update(label=label)
+        if midi is not None:
+            batch.update(midi=midi)
+        if duration_phn is not None:
+            batch.update(duration_phn=duration_phn)
+        if duration_ruled_phn is not None:
+            batch.update(duration_ruled_phn=duration_ruled_phn)
+        if duration_syb is not None:
+            batch.update(duration_syb=duration_syb)
         if pitch is not None:
             batch.update(pitch=pitch)
-        if tempo_lab is not None:
-            batch.update(tempo_lab=tempo_lab)
-        if tempo_xml is not None:
-            batch.update(tempo_xml=tempo_xml)
-        if beat_lab is not None:
-            batch.update(beat_lab=beat_lab)
-        if beat_xml is not None:
-            batch.update(beat_xml=beat_xml)
+        if phn_cnt is not None:
+            batch.update(phn_cnt=phn_cnt)
         if energy is not None:
             batch.update(energy=energy)
         if spembs is not None:
@@ -141,31 +164,31 @@ class SingingGenerate:
             batch.update(lids=lids)
         batch = to_device(batch, self.device)
 
-        cfg = self.decode_config
+        cfg = self.decode_conf
         if decode_conf is not None:
             cfg = self.decode_conf.copy()
             cfg.update(decode_conf)
+        output_dict = self.model.inference(**batch, **cfg)
 
-        batch = to_device(batch, self.device)
-        outs, outs_denorm, probs, att_ws = self.model.inference(**batch, **cfg)
-
-        if att_ws is not None:
-            duration, focus_rate = self.duration_calculator(att_ws)
+        if output_dict.get("att_ws") is not None:
+            output_dict.update(duration=None, focus_rate=None)
+            # duration, focus_rate = self.duration_calculator(att_ws)
         else:
-            duration, focus_rate = None, None
+            output_dict.update(duration=None, focus_rate=None)
 
-        assert outs.shape[0] == 1
-        outs = outs.squeeze(0)
-        outs_denorm = outs_denorm.squeeze(0)
+        # apply vocoder (mel-to-wav)
         if self.vocoder is not None:
-            if self.vocoder.normalize_before:
-                wav = self.vocoder(outs_denorm)
+            if (
+                self.prefer_normalized_feats
+                or output_dict.get("feat_gen_denorm") is None
+            ):
+                input_feat = output_dict["feat_gen"]
             else:
-                wav = self.vocoder(outs)
-        else:
-            wav = None
+                input_feat = output_dict["feat_gen_denorm"]
+            wav = self.vocoder(input_feat)
+            output_dict.update(wav=wav)
 
-        return wav, outs, outs_denorm, probs, att_ws, duration, focus_rate
+        return output_dict
 
     @property
     def fs(self) -> Optional[int]:
@@ -197,6 +220,67 @@ class SingingGenerate:
         """Return spemb is needed or not in the inference."""
         return self.svs.spk_embed_dim is not None
 
+    @staticmethod
+    def from_pretrained(
+        model_tag: Optional[str] = None,
+        vocoder_tag: Optional[str] = None,
+        **kwargs: Optional[Any],
+    ):
+        """Build SingingGenerate instance from the pretrained model.
+
+        Args:
+            model_tag (Optional[str]): Model tag of the pretrained models.
+                Currently, the tags of espnet_model_zoo are supported.
+            vocoder_tag (Optional[str]): Vocoder tag of the pretrained vocoders.
+                Currently, the tags of parallel_wavegan are supported, which should
+                start with the prefix "parallel_wavegan/".
+
+        Returns:
+            SingingGenerate: SingingGenerate instance.
+
+        """
+        if model_tag is not None:
+            try:
+                from espnet_model_zoo.downloader import ModelDownloader
+
+            except ImportError:
+                logging.error(
+                    "`espnet_model_zoo` is not installed. "
+                    "Please install via `pip install -U espnet_model_zoo`."
+                )
+                raise
+            d = ModelDownloader()
+            kwargs.update(**d.download_and_unpack(model_tag))
+
+        if vocoder_tag is not None:
+            if vocoder_tag.startswith("parallel_wavegan/"):
+                try:
+                    from parallel_wavegan.utils import download_pretrained_model
+
+                except ImportError:
+                    logging.error(
+                        "`parallel_wavegan` is not installed. "
+                        "Please install via `pip install -U parallel_wavegan`."
+                    )
+                    raise
+
+                from parallel_wavegan import __version__
+
+                # NOTE(kan-bayashi): Filelock download is supported from 0.5.2
+                assert V(__version__) > V("0.5.1"), (
+                    "Please install the latest parallel_wavegan "
+                    "via `pip install -U parallel_wavegan`."
+                )
+                vocoder_tag = vocoder_tag.replace("parallel_wavegan/", "")
+                vocoder_file = download_pretrained_model(vocoder_tag)
+                vocoder_config = Path(vocoder_file).parent / "config.yml"
+                kwargs.update(vocoder_config=vocoder_config, vocoder_file=vocoder_file)
+
+            else:
+                raise ValueError(f"{vocoder_tag} is unsupported format.")
+
+        return SingingGenerate(**kwargs)
+
 
 def inference(
     output_dir: str,
@@ -211,6 +295,8 @@ def inference(
     train_config: Optional[str],
     model_file: Optional[str],
     use_teacher_forcing: bool,
+    noise_scale: float,
+    noise_scale_dur: float,
     allow_variable_data_keys: bool,
     vocoder_config: Optional[str] = None,
     vocoder_checkpoint: Optional[str] = None,
@@ -239,6 +325,8 @@ def inference(
         train_config=train_config,
         model_file=model_file,
         use_teacher_forcing=use_teacher_forcing,
+        noise_scale=noise_scale,
+        noise_scale_dur=noise_scale_dur,
         vocoder_config=vocoder_config,
         vocoder_checkpoint=vocoder_checkpoint,
         dtype=dtype,
@@ -302,57 +390,70 @@ def inference(
             logging.info(f"keys: {keys}")
 
             start_time = time.perf_counter()
-            (
-                wav,
-                outs,
-                outs_denorm,
-                probs,
-                att_ws,
-                duration,
-                focus_rate,
-            ) = singingGenerate(**batch)
+            output_dict = singingGenerate(**batch)
 
             key = keys[0]
             insize = next(iter(batch.values())).size(0) + 1
-            logging.info(
-                "inference speed = {:.1f} frames / sec.".format(
-                    int(outs.size(0)) / (time.perf_counter() - start_time)
+            if output_dict.get("feat_gen") is not None:
+                # standard text2mel model case
+                feat_gen = output_dict["feat_gen"]
+                logging.info(
+                    "inference speed = {:.1f} frames / sec.".format(
+                        int(feat_gen.size(0)) / (time.perf_counter() - start_time)
+                    )
                 )
-            )
-            logging.info(f"{key} (size:{insize}->{outs.size(0)})")
+                logging.info(f"{key} (size:{insize}->{feat_gen.size(0)})")
 
-            norm_writer[key] = outs.cpu().numpy()
-            shape_writer.write(f"{key} " + ",".join(map(str, outs.shape)) + "\n")
+                norm_writer[key] = output_dict["feat_gen"].cpu().numpy()
+                shape_writer.write(
+                    f"{key} " + ",".join(map(str, output_dict["feat_gen"].shape)) + "\n"
+                )
+                if output_dict.get("feat_gen_denorm") is not None:
+                    denorm_writer[key] = output_dict["feat_gen_denorm"].cpu().numpy()
+            else:
+                # end-to-end text2wav model case
+                wav = output_dict["wav"]
+                logging.info(
+                    "inference speed = {:.1f} points / sec.".format(
+                        int(wav.size(0)) / (time.perf_counter() - start_time)
+                    )
+                )
+                logging.info(f"{key} (size:{insize}->{wav.size(0)})")
 
-            denorm_writer[key] = outs_denorm.cpu().numpy()
-
-            if duration is not None:
+            if output_dict.get("duration") is not None:
                 # Save duration and fucus rates
                 duration_writer.write(
-                    f"{key} " + " ".join(map(str, duration.cpu().numpy())) + "\n"
+                    f"{key} "
+                    + " ".join(map(str, output_dict["duration"].long().cpu().numpy()))
+                    + "\n"
                 )
-                focus_rate_writer.write(f"{key} {float(focus_rate):.5f}\n")
 
+            if output_dict.get("focus_rate") is not None:
+                focus_rate_writer.write(
+                    f"{key} {float(output_dict['focus_rate']):.5f}\n"
+                )
+
+            if output_dict.get("att_w") is not None:
                 # Plot attention weight
-                att_ws = att_ws.cpu().numpy()
+                att_w = output_dict["att_w"].cpu().numpy()
 
-                if att_ws.ndim == 2:
-                    att_ws = att_ws[None][None]
-                elif att_ws.ndim != 4:
-                    raise RuntimeError(f"Must be 2 or 4 dimension: {att_ws.ndim}")
+                if att_w.ndim == 2:
+                    att_w = att_w[None][None]
+                elif att_w.ndim != 4:
+                    raise RuntimeError(f"Must be 2 or 4 dimension: {att_w.ndim}")
 
-                w, h = plt.figaspect(att_ws.shape[0] / att_ws.shape[1])
+                w, h = plt.figaspect(att_w.shape[0] / att_w.shape[1])
                 fig = plt.Figure(
                     figsize=(
-                        w * 1.3 * min(att_ws.shape[0], 2.5),
-                        h * 1.3 * min(att_ws.shape[1], 2.5),
+                        w * 1.3 * min(att_w.shape[0], 2.5),
+                        h * 1.3 * min(att_w.shape[1], 2.5),
                     )
                 )
                 fig.suptitle(f"{key}")
-                axes = fig.subplots(att_ws.shape[0], att_ws.shape[1])
-                if len(att_ws) == 1:
+                axes = fig.subplots(att_w.shape[0], att_w.shape[1])
+                if len(att_w) == 1:
                     axes = [[axes]]
-                for ax, att_w in zip(axes, att_ws):
+                for ax, att_w in zip(axes, att_w):
                     for ax_, att_w_ in zip(ax, att_w):
                         ax_.imshow(att_w_.astype(np.float32), aspect="auto")
                         ax_.set_xlabel("Input")
@@ -364,13 +465,13 @@ def inference(
                 fig.savefig(output_dir / f"att_ws/{key}.png")
                 fig.clf()
 
-            if probs is not None:
+            if output_dict.get("prob") is not None:
                 # Plot stop token prediction
-                probs = probs.cpu().numpy()
+                prob = output_dict["prob"].cpu().numpy()
 
                 fig = plt.Figure()
                 ax = fig.add_subplot(1, 1, 1)
-                ax.plot(probs)
+                ax.plot(prob)
                 ax.set_title(f"{key}")
                 ax.set_xlabel("Output")
                 ax.set_ylabel("Stop probability")
@@ -381,21 +482,29 @@ def inference(
                 fig.savefig(output_dir / f"probs/{key}.png")
                 fig.clf()
             # TODO(kamo): Write scp
-            if wav is not None:
+            if output_dict.get("wav") is not None:
                 sf.write(
                     f"{output_dir}/wav/{key}.wav",
-                    wav.numpy(),
+                    output_dict["wav"].cpu().numpy(),
                     singingGenerate.fs,
                     "PCM_16",
                 )
 
-    # remove duration related files if attention is not provided
-    if att_ws is None:
+    # remove files if those are not included in output dict
+    if output_dict.get("feat_gen") is None:
+        shutil.rmtree(output_dir / "norm")
+    if output_dict.get("feat_gen_denorm") is None:
+        shutil.rmtree(output_dir / "denorm")
+    if output_dict.get("att_w") is None:
         shutil.rmtree(output_dir / "att_ws")
+    if output_dict.get("duration") is None:
         shutil.rmtree(output_dir / "durations")
+    if output_dict.get("focus_rate") is None:
         shutil.rmtree(output_dir / "focus_rates")
-    if probs is None:
+    if output_dict.get("prob") is None:
         shutil.rmtree(output_dir / "probs")
+    if output_dict.get("wav") is None:
+        shutil.rmtree(output_dir / "wav")
 
 
 def get_parser():
@@ -488,6 +597,18 @@ def get_parser():
         type=str2bool,
         default=False,
         help="Whether to use teacher forcing",
+    )
+    parser.add_argument(
+        "--noise_scale",
+        type=float,
+        default=0.667,
+        help="Noise scale parameter for the flow in vits",
+    )
+    parser.add_argument(
+        "--noise_scale_dur",
+        type=float,
+        default=0.8,
+        help="Noise scale parameter for the stochastic duration predictor in vits",
     )
 
     group = parser.add_argument_group("Vocoder related")
