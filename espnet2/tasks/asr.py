@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from typeguard import check_argument_types, check_return_type
 
+from espnet2.asr.condchain_espnet_model import ESPnetCondChainASRModel
 from espnet2.asr.ctc import CTC
 from espnet2.asr.decoder.abs_decoder import AbsDecoder
 from espnet2.asr.decoder.hugging_face_transformers_decoder import (  # noqa: H301
@@ -25,6 +26,7 @@ from espnet2.asr.decoder.transformer_decoder import (
 from espnet2.asr.decoder.whisper_decoder import OpenAIWhisperDecoder
 from espnet2.asr.encoder.abs_encoder import AbsEncoder
 from espnet2.asr.encoder.branchformer_encoder import BranchformerEncoder
+from espnet2.asr.encoder.conformer_condchain_encoder import ConformerCondChainEncoder
 from espnet2.asr.encoder.conformer_encoder import ConformerEncoder
 from espnet2.asr.encoder.contextual_block_conformer_encoder import (
     ContextualBlockConformerEncoder,
@@ -74,11 +76,15 @@ from espnet2.text.phoneme_tokenizer import g2p_choices
 from espnet2.torch_utils.initialize import initialize
 from espnet2.train.abs_espnet_model import AbsESPnetModel
 from espnet2.train.class_choices import ClassChoices
-from espnet2.train.collate_fn import CommonCollateFn
+from espnet2.train.collate_fn import (
+    CommonCollateFn,
+    CondChainCollateFn,
+)
 from espnet2.train.preprocessor import (
     AbsPreprocessor,
     CommonPreprocessor,
     CommonPreprocessor_multi,
+    CondChainPreprocessor,
 )
 from espnet2.train.trainer import Trainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
@@ -122,6 +128,7 @@ model_choices = ClassChoices(
         espnet=ESPnetASRModel,
         maskctc=MaskCTCModel,
         pit_espnet=PITESPnetModel,
+        condchain=ESPnetCondChainASRModel,
     ),
     type_check=AbsESPnetModel,
     default="espnet",
@@ -154,6 +161,7 @@ encoder_choices = ClassChoices(
         branchformer=BranchformerEncoder,
         whisper=OpenAIWhisperEncoder,
         e_branchformer=EBranchformerEncoder,
+        conformer_condchain=ConformerCondChainEncoder,
     ),
     type_check=AbsEncoder,
     default="rnn",
@@ -191,8 +199,17 @@ preprocessor_choices = ClassChoices(
     classes=dict(
         default=CommonPreprocessor,
         multi=CommonPreprocessor_multi,
+        condchain=CondChainPreprocessor,
     ),
     type_check=AbsPreprocessor,
+    default="default",
+)
+collate_fn_choices = ClassChoices(
+    "collate_fn",
+    classes=dict(
+        default=CommonCollateFn,
+        condchain=CondChainCollateFn,
+    ),
     default="default",
 )
 
@@ -221,6 +238,8 @@ class ASRTask(AbsTask):
         decoder_choices,
         # --preprocessor and --preprocessor_conf
         preprocessor_choices,
+        # --collate_fn and --collate_fn_conf
+        collate_fn_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -394,8 +413,16 @@ class ASRTask(AbsTask):
         Tuple[List[str], Dict[str, torch.Tensor]],
     ]:
         assert check_argument_types()
+        try:
+            _ = getattr(args, "collate_fn")
+        except AttributeError:
+            setattr(args, "collate_fn", "default")
+        except Exception as e:
+            raise e
+
+        collatefn_class = collate_fn_choices.get_class(args.collate_fn)
         # NOTE(kamo): int value = 0 is reserved by CTC-blank symbol
-        return CommonCollateFn(float_pad_value=0.0, int_pad_value=-1)
+        return collatefn_class(float_pad_value=0.0, int_pad_value=-1)
 
     @classmethod
     def build_preprocess_fn(

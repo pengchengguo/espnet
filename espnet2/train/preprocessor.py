@@ -527,6 +527,100 @@ class CommonPreprocessor_multi(CommonPreprocessor):
         return data
 
 
+class CondChainPreprocessor(CommonPreprocessor):
+    def __init__(
+        self,
+        train: bool,
+        token_type: str = None,
+        token_list: Union[Path, str, Iterable[str]] = None,
+        bpemodel: Union[Path, str, Iterable[str]] = None,
+        text_cleaner: Collection[str] = None,
+        g2p_type: str = None,
+        unk_symbol: str = "<unk>",
+        space_symbol: str = "<space>",
+        non_linguistic_symbols: Union[Path, str, Iterable[str]] = None,
+        delimiter: str = None,
+        rir_scp: str = None,
+        rir_apply_prob: float = 1.0,
+        noise_scp: str = None,
+        noise_apply_prob: float = 1.0,
+        noise_db_range: str = "3_10",
+        short_noise_thres: float = 0.5,
+        aux_task_names: Collection[str] = None,
+        speech_volume_normalize: float = None,
+        speech_name: str = "speech",
+        text_name: List[str] = ["text"],
+        fs: int = 0,
+        speaker_split_symbol: Iterable[str] = None,
+    ):
+        assert check_argument_types()
+        super().__init__(
+            train=train,
+            token_type=token_type,
+            token_list=token_list,
+            bpemodel=bpemodel,
+            text_cleaner=text_cleaner,
+            g2p_type=g2p_type,
+            unk_symbol=unk_symbol,
+            space_symbol=space_symbol,
+            non_linguistic_symbols=non_linguistic_symbols,
+            delimiter=delimiter,
+            rir_scp=rir_scp,
+            rir_apply_prob=rir_apply_prob,
+            noise_scp=noise_scp,
+            noise_apply_prob=noise_apply_prob,
+            noise_db_range=noise_db_range,
+            short_noise_thres=short_noise_thres,
+            aux_task_names=aux_task_names,
+            speech_volume_normalize=speech_volume_normalize,
+            speech_name=speech_name,
+            fs=fs,
+            nonsplit_symbol=speaker_split_symbol,
+        )
+        if isinstance(text_name, str):
+            self.text_name = [text_name]
+        else:
+            self.text_name = text_name
+
+        assert len(speaker_split_symbol) == 1
+        self.speaker_split_symbol = speaker_split_symbol[0]
+
+    def _text_process(
+        self, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, Union[np.ndarray, List[np.ndarray]]]:
+        for text_n in self.text_name:
+            if text_n in data and self.tokenizer is not None:
+                text = data[text_n]
+                text = self.text_cleaner(text)
+                text_lst = text.split(self.speaker_split_symbol)[1:]
+                text_ints_lst = []
+                for i in range(len(text_lst)):
+                    tmp_text = text_lst[i].strip()
+                    tokens = self.tokenizer.text2tokens(tmp_text)
+                    text_ints = self.token_id_converter.tokens2ids(tokens)
+                    text_ints_lst.append(np.array(text_ints, dtype=np.int64))
+                data[text_n] = text_ints_lst
+        if self.aux_task_names is not None and self.tokenizer is not None:
+            for name in self.aux_task_names:
+                if name in data:
+                    text = data[name]
+                    text = self.text_cleaner(text)
+                    tokens = self.tokenizer.text2tokens(text)
+                    text_ints = self.token_id_converter.tokens2ids(tokens)
+                    data[name] = np.array(text_ints, dtype=np.int64)
+        assert check_return_type(data)
+        return data
+
+    def __call__(
+        self, uid: str, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        assert check_argument_types()
+
+        data = self._speech_process(data)
+        data = self._text_process(data)
+        return data
+
+
 class MutliTokenizerCommonPreprocessor(CommonPreprocessor):
     def __init__(
         self,

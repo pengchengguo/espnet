@@ -108,6 +108,33 @@ class HuBERTCollateFn(CommonCollateFn):
         )
 
 
+class CondChainCollateFn(CommonCollateFn):
+    """Collate Function for Conditinal Chain Model"""
+
+    def __init__(
+        self,
+        float_pad_value: Union[float, int] = 0,
+        int_pad_value: int = -32768,
+        not_sequence: Collection[str] = (),
+    ):
+        assert check_argument_types()
+        super().__init__(
+            float_pad_value=float_pad_value,
+            int_pad_value=int_pad_value,
+            not_sequence=not_sequence,
+        )
+
+    def __call__(
+        self, data: Collection[Tuple[str, Dict[str, np.ndarray]]]
+    ) -> Tuple[List[str], Dict[str, torch.Tensor]]:
+        return condchain_collate_fn(
+            data,
+            float_pad_value=self.float_pad_value,
+            int_pad_value=self.int_pad_value,
+            not_sequence=self.not_sequence,
+        )
+
+
 def _crop_audio_label(
     waveform: torch.Tensor,
     label: torch.Tensor,
@@ -212,6 +239,97 @@ def common_collate_fn(
         if key not in not_sequence:
             lens = torch.tensor([d[key].shape[0] for d in data], dtype=torch.long)
             output[key + "_lengths"] = lens
+
+    output = (uttids, output)
+    assert check_return_type(output)
+    return output
+
+
+def condchain_collate_fn(
+    data: Collection[Tuple[str, Dict[str, np.ndarray]]],
+    float_pad_value: Union[float, int] = 0.0,
+    int_pad_value: int = -32768,
+    not_sequence: Collection[str] = (),
+) -> Tuple[List[str], Dict[str, torch.Tensor]]:
+    """Concatenate ndarray-list to an array and convert to torch.Tensor."""
+    assert check_argument_types()
+    uttids = [u for u, _ in data]
+    data = [d for _, d in data]
+
+    assert all(set(data[0]) == set(d) for d in data), "dict-keys mismatching"
+    assert all(
+        not k.endswith("_lengths") for k in data[0]
+    ), f"*_lengths is reserved: {list(data[0])}"
+
+    output = {}
+    for key in data[0]:
+        # For speech, a np.ndarray whose shape is (time, dim)
+        if isinstance(data[0][key], np.ndarray):
+            if data[0][key].dtype.kind == "i":
+                pad_value = int_pad_value
+            else:
+                pad_value = float_pad_value
+        # For text, a list of np.ndarray containing texts of multi speakers
+        elif isinstance(data[0][key], list):
+            assert isinstance(data[0][key][0], np.ndarray)
+            if data[0][key][0].dtype.kind == "i":
+                pad_value = int_pad_value
+            else:
+                pad_value = float_pad_value
+        else:
+            raise NotImplementedError(f"Not supported dtype: {type(data[0][key])}")
+
+        array_list = [d[key] for d in data]
+
+        # For speech, a np.ndarray whose shape is (time, dim)
+        if isinstance(array_list[0], np.ndarray):
+            # Assume the first axis is length:
+            # tensor_list: Batch x (Length, ...)
+            tensor_list = [torch.from_numpy(a) for a in array_list]
+            # tensor: (Batch, Length, ...)
+            tensor = pad_list(tensor_list, pad_value)
+            output[key] = tensor
+        # For text, a list of np.ndarray containing texts of multi speakers
+        elif isinstance(array_list[0], list):
+            assert isinstance(array_list[0][0], np.ndarray)
+            # For conditional chain based muti-speaker ASR,
+            # array_list.shape = Batch x Num_Speaker x (Length, ...)
+            tensor_list = []
+            for a in array_list:
+                # inner_tensor_list: Num_Speaker x (Length, ...)
+                inner_tensor_list = [torch.from_numpy(x) for x in a]
+                # inner_tensor: (Num_Speaker, Length, ...)
+                inner_tensor = pad_list(inner_tensor_list, pad_value)
+                # tensor_list: Batch x (Length, Num_Speaker, ...)
+                tensor_list.append(inner_tensor.transpose(0, 1))
+
+            assert all(
+                tensor_list[0].shape[1] == t.shape[1] for t in tensor_list
+            ), "The number of mixed speakers should be same in a batch."
+
+            # tensor: (Batch, Length, Num_Speaker, ...)
+            tensor = pad_list(tensor_list, pad_value)
+            tensor = tensor.transpose(1, 2)
+            output[key] = tensor
+        else:
+            raise NotImplementedError(f"Not supported dtype: {type(array_list[0])}")
+
+        if key not in not_sequence:
+            # For speech, a np.ndarray whose shape is (time, dim)
+            if isinstance(data[0][key], np.ndarray):
+                lens = torch.tensor([d[key].shape[0] for d in data], dtype=torch.long)
+                output[key + "_lengths"] = lens
+            # For text, a list of np.ndarray containing texts of multi speakers
+            elif isinstance(data[0][key], list):
+                assert isinstance(data[0][key][0], np.ndarray)
+                lens = []
+                for d in data:
+                    inner_lens = [x.shape[0] for x in d[key]]
+                    lens.append(inner_lens)
+                lens = torch.tensor(lens, dtype=torch.long)
+                output[key + "_lengths"] = lens
+            else:
+                raise NotImplementedError(f"Not supported dtype: {type(data[0][key])}")
 
     output = (uttids, output)
     assert check_return_type(output)
