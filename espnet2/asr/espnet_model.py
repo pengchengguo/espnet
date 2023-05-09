@@ -68,6 +68,7 @@ class ESPnetASRModel(AbsESPnetModel):
         # Pretrained HF Tokenizer needs custom sym_sos and sym_eos
         sym_sos: str = "<sos/eos>",
         sym_eos: str = "<sos/eos>",
+        extract_feats_in_collect_stats: bool = True,
         lang_token_id: int = -1,
     ):
         assert check_argument_types()

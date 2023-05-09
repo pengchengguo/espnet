@@ -585,24 +585,6 @@ class ASRTask(AbsTask):
         else:
             postencoder = None
 
-<<<<<<< HEAD
-        # 7. Decoder
-        decoder_class = decoder_choices.get_class(args.decoder)
-
-        if args.decoder == "transducer":
-            decoder = decoder_class(
-                vocab_size,
-                embed_pad=0,
-                **args.decoder_conf,
-            )
-
-            joint_network = JointNetwork(
-                vocab_size,
-                encoder.output_size(),
-                decoder.dunits,
-                **args.joint_net_conf,
-            )
-=======
         # 5. Decoder
         if getattr(args, "decoder", None) is not None:
             decoder_class = decoder_choices.get_class(args.decoder)
@@ -627,7 +609,6 @@ class ASRTask(AbsTask):
                     **args.decoder_conf,
                 )
                 joint_network = None
->>>>>>> master
         else:
             decoder = None
             joint_network = None
