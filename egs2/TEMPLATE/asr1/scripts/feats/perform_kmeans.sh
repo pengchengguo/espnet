@@ -133,6 +133,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && ! [[ " ${skip_stages} " =~ [
 
         nutt=$(<"${_dump_dir}"/wav.scp wc -l)
         _nj=$((nj<nutt?nj:nutt))
+        _nj=7
 
         key_file="${datadir}/${dset}"/wav.scp
         split_scps=""
@@ -149,7 +150,7 @@ if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ] && ! [[ " ${skip_stages} " =~ [
 
         # shellcheck disable=SC2046,SC2086
         ${_cmd} JOB=1:${_nj} ${_logdir}/dump_features.JOB.log \
-            ${python} pyscripts/feats/dump_ssl_feature.py \
+            CUDA_VISIBLE_DEVICES=JOB ${python} pyscripts/feats/dump_ssl_feature.py \
                 --feature_conf "'${feature_conf}'" \
                 --use_gpu ${use_gpu} \
                 --in_filetype "${_in_filetype}" \
@@ -248,6 +249,7 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ] && ! [[ " ${skip_stages} " =~ [
 
         nutt=$(<"${_dump_dir}"/${key} wc -l)
         _nj=$((nj<nutt?nj:nutt))
+        _nj=7
 
         key_file="${_dump_dir}"/${key}
         split_scps=""
@@ -264,7 +266,7 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ] && ! [[ " ${skip_stages} " =~ [
         done
 
         ${_cmd} JOB=1:${_nj} "${_dump_dir}"/logdir/inference_pseudo_labels_km${nclusters}.JOB.log \
-            ${python} pyscripts/feats/dump_km_label.py \
+            CUDA_VISIBLE_DEVICES=JOB ${python} pyscripts/feats/dump_km_label.py \
                 ${_opts} \
                 --km_path "${km_dir}/km_${nclusters}.mdl" \
                 --out_filetype "mat" \

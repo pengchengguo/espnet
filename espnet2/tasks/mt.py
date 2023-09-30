@@ -39,13 +39,17 @@ from espnet2.asr.specaug.abs_specaug import AbsSpecAug
 from espnet2.asr.specaug.specaug import SpecAug
 from espnet2.mt.espnet_model import ESPnetMTModel
 from espnet2.mt.frontend.embedding import Embedding
+from espnet2.st.discrete_st_espnet_model import ESPnetDiscreteSTModel
 from espnet2.tasks.abs_task import AbsTask
 from espnet2.text.phoneme_tokenizer import g2p_choices
 from espnet2.torch_utils.initialize import initialize
 from espnet2.train.abs_espnet_model import AbsESPnetModel
 from espnet2.train.class_choices import ClassChoices
 from espnet2.train.collate_fn import CommonCollateFn
-from espnet2.train.preprocessor import MutliTokenizerCommonPreprocessor
+from espnet2.train.preprocessor import (
+    AbsPreprocessor,
+    MutliTokenizerCommonPreprocessor,
+)
 from espnet2.train.trainer import Trainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
 from espnet2.utils.nested_dict_action import NestedDictAction
@@ -92,6 +96,20 @@ encoder_choices = ClassChoices(
     type_check=AbsEncoder,
     default="rnn",
 )
+hier_encoder_choices = ClassChoices(
+    "hier_encoder",
+    classes=dict(
+        conformer=ConformerEncoder,
+        transformer=TransformerEncoder,
+        vgg_rnn=VGGRNNEncoder,
+        rnn=RNNEncoder,
+        branchformer=BranchformerEncoder,
+        e_branchformer=EBranchformerEncoder,
+    ),
+    type_check=AbsEncoder,
+    default=None,
+    optional=True,
+)
 postencoder_choices = ClassChoices(
     name="postencoder",
     classes=dict(
@@ -119,9 +137,18 @@ model_choices = ClassChoices(
     classes=dict(
         mt=ESPnetMTModel,
         discrete_asr=ESPnetDiscreteASRModel,
+        discrete_st=ESPnetDiscreteSTModel,
     ),
     type_check=AbsESPnetModel,
     default="mt",
+)
+preprocessor_choices = ClassChoices(
+    "preprocessor",
+    classes=dict(
+        default=MutliTokenizerCommonPreprocessor,
+    ),
+    type_check=AbsPreprocessor,
+    default="default",
 )
 
 
@@ -139,12 +166,16 @@ class MTTask(AbsTask):
         preencoder_choices,
         # --encoder and --encoder_conf
         encoder_choices,
+        # --hier_encoder and --hier_encoder_conf
+        hier_encoder_choices,
         # --postencoder and --postencoder_conf
         postencoder_choices,
         # --decoder and --decoder_conf
         decoder_choices,
         # --model and --model_conf
         model_choices,
+        # --preprocessor and --preprocessor_conf
+        preprocessor_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -164,6 +195,12 @@ class MTTask(AbsTask):
             type=str_or_none,
             default=None,
             help="A text mapping int-id to token (for target language)",
+        )
+        group.add_argument(
+            "--ctc_token_list",
+            type=str_or_none,
+            default=None,
+            help="A text mapping int-id to token (for CTC source language)",
         )
         group.add_argument(
             "--src_token_list",
@@ -214,6 +251,14 @@ class MTTask(AbsTask):
             help="The target text will be tokenized " "in the specified level token",
         )
         group.add_argument(
+            "--ctc_token_type",
+            type=str,
+            default="bpe",
+            choices=["bpe", "char", "word", "phn"],
+            help="The CTC target text will be tokenized "
+            "in the specified level token",
+        )
+        group.add_argument(
             "--src_token_type",
             type=str,
             default="bpe",
@@ -225,6 +270,12 @@ class MTTask(AbsTask):
             type=str_or_none,
             default=None,
             help="The model file of sentencepiece (for target language)",
+        )
+        group.add_argument(
+            "--ctc_bpemodel",
+            type=str_or_none,
+            default=None,
+            help="The model file of sentencepiece (for CTC source language)",
         )
         group.add_argument(
             "--src_bpemodel",
@@ -288,21 +339,55 @@ class MTTask(AbsTask):
     ) -> Optional[Callable[[str, Dict[str, np.array]], Dict[str, np.ndarray]]]:
         assert check_argument_types()
         if args.use_preprocessor:
+            # TODO(simpleoier): the following preprocessor_conf and ctc_* are too hacky.
+            try:
+                _ = getattr(args, "preprocessor")
+            except AttributeError:
+                setattr(args, "preprocessor", "default")
+                setattr(args, "preprocessor_conf", dict())
+            except Exception as e:
+                raise e
+            _ctc_token_type = (
+                []
+                if getattr(args, "ctc_token_type", None) is None
+                else [args.ctc_token_type]
+            )
+            _ctc_token_list = (
+                []
+                if getattr(args, "ctc_token_type", None) is None
+                else [args.token_list]
+            )
+            _ctc_bpemodel = (
+                [] if getattr(args, "ctc_token_type", None) is None else [args.bpemodel]
+            )
+            _ctc_text_name = (
+                [] if getattr(args, "ctc_token_type", None) is None else ["text_ctc"]
+            )
+            _ctc_tokenizer_encode_conf = (
+                []
+                if getattr(args, "ctc_token_type", None) is None
+                else [args.tokenizer_encode_conf]
+                if train
+                else [dict()]
+            )
+
             retval = MutliTokenizerCommonPreprocessor(
                 train=train,
-                token_type=[args.token_type, args.src_token_type],
-                token_list=[args.token_list, args.src_token_list],
-                bpemodel=[args.bpemodel, args.src_bpemodel],
+                token_type=[args.token_type, args.src_token_type] + _ctc_token_type,
+                token_list=[args.token_list, args.src_token_list] + _ctc_token_list,
+                bpemodel=[args.bpemodel, args.src_bpemodel] + _ctc_bpemodel,
+                text_name=["text", "src_text"] + _ctc_text_name,
                 non_linguistic_symbols=args.non_linguistic_symbols,
                 text_cleaner=args.cleaner,
                 g2p_type=args.g2p,
-                text_name=["text", "src_text"],
                 tokenizer_encode_conf=[
                     args.tokenizer_encode_conf,
                     args.src_tokenizer_encode_conf,
                 ]
+                + _ctc_tokenizer_encode_conf
                 if train
-                else [dict(), dict()],
+                else [dict(), dict()] + _ctc_tokenizer_encode_conf,
+                **args.preprocessor_conf,
             )
         else:
             retval = None
@@ -325,7 +410,7 @@ class MTTask(AbsTask):
         cls, train: bool = True, inference: bool = False
     ) -> Tuple[str, ...]:
         if not inference:
-            retval = ()
+            retval = ("text_ctc",)
         else:
             retval = ()
         assert check_return_type(retval)
@@ -396,9 +481,17 @@ class MTTask(AbsTask):
         encoder_class = encoder_choices.get_class(args.encoder)
         encoder = encoder_class(input_size=input_size, **args.encoder_conf)
 
+        if getattr(args, "hier_encoder", None) is not None:
+            hier_encoder_class = hier_encoder_choices.get_class(args.hier_encoder)
+            hier_encoder = hier_encoder_class(
+                input_size=encoder.output_size(), **args.hier_encoder_conf
+            )
+            encoder_output_size = hier_encoder.output_size()
+        else:
+            hier_encoder = None
+            encoder_output_size = encoder.output_size()
         # 5. Post-encoder block
         # NOTE(kan-bayashi): Use getattr to keep the compatibility
-        encoder_output_size = encoder.output_size()
         if getattr(args, "postencoder", None) is not None:
             postencoder_class = postencoder_choices.get_class(args.postencoder)
             postencoder = postencoder_class(
@@ -419,6 +512,10 @@ class MTTask(AbsTask):
 
         # 6. CTC
         ctc = CTC(
+            odim=vocab_size, encoder_output_size=encoder.output_size(), **args.ctc_conf
+        )
+
+        st_ctc = CTC(
             odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
         )
 
@@ -427,6 +524,13 @@ class MTTask(AbsTask):
             model_class = model_choices.get_class(args.model)
             if args.model == "discrete_asr":
                 extra_model_conf = dict(ctc=ctc, specaug=specaug)
+            elif args.model == "discrete_st":
+                extra_model_conf = dict(
+                    ctc=ctc,
+                    specaug=specaug,
+                    st_ctc=st_ctc,
+                    hier_encoder=hier_encoder,
+                )
             else:
                 extra_model_conf = dict()
         except AttributeError:
