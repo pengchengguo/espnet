@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import argparse
+import codecs
 import logging
-import os
 import sys
 from pathlib import Path
 
@@ -11,8 +11,6 @@ from espnet2.text.whisper_tokenizer import LANGUAGES_CODE_MAPPING
 from espnet2.utils.types import str2bool
 from espnet.utils.cli_utils import get_commandline_args
 
-dirname = os.path.dirname(__file__)
-
 
 def export_vocabulary(
     output: str,
@@ -20,9 +18,7 @@ def export_vocabulary(
     whisper_language: str = "en",
     whisper_task: str = "transcribe",
     log_level: str = "INFO",
-    add_token_file_name: str = "none",
-    sot_asr: bool = False,
-    speaker_change_symbol: str = "<sc>",
+    added_tokens_file: str = "none",
 ):
     try:
         import whisper.tokenizer
@@ -59,20 +55,10 @@ def export_vocabulary(
         tokenizer = whisper.tokenizer.get_tokenizer(
             multilingual=True, language=whisper_language, task=whisper_task
         )
-        # import pdb;pdb.set_trace()
-        if add_token_file_name != "none":
-            _added_tokens = []
-            with open(add_token_file_name) as f:
-                lines = f.readlines()
-                for line in lines:
-                    _added_tokens.append(line.rstrip())
-            tokenizer.tokenizer.add_tokens(_added_tokens)
     else:
         raise ValueError("tokenizer unsupported:", whisper_model)
 
-    vocab_size = tokenizer.tokenizer.vocab_size + len(
-        tokenizer.tokenizer.get_added_vocab()
-    )
+    vocab_size = len(tokenizer.tokenizer.vocab)
     if whisper_model == "whisper_en":
         vocab_size = vocab_size - 1
 
@@ -88,10 +74,15 @@ def export_vocabulary(
     for i in range(full_vocab_size - vocab_size):
         fout.write(f"<|{i*0.02:.2f}|>" + "\n")
 
-    if sot_asr:
-        full_vocab_size += 1
-        fout.write(speaker_change_symbol + "\n")
+    if added_tokens_file != "none":
+        # Additional tokens to the Whisper tokenizer. Don't need to change the
+        # ori tokenizer here since this script is only used for exporting vocabulary.
+        with codecs.open(added_tokens_file, "r", "utf-8") as fin:
+            for line in fin.readlines():
+                full_vocab_size += 1
+                fout.write(line.rstrip() + "\n")
 
+    fout.close()
 
 def get_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -116,12 +107,6 @@ def get_parser() -> argparse.ArgumentParser:
         help="Whisper model type",
     )
     parser.add_argument(
-        "--add_token_file_name",
-        type=str,
-        default="none",
-        help="File name for added tokens",
-    )
-    parser.add_argument(
         "--whisper_language",
         type=str,
         default="en",
@@ -134,18 +119,10 @@ def get_parser() -> argparse.ArgumentParser:
         help="Task for Whisper multilingual tokenizer",
     )
     parser.add_argument(
-        "--sot_asr",
-        type=str2bool,
-        default=False,
-        required=False,
-        help="Whether SOT-style training is used in Whisper",
-    )
-    parser.add_argument(
-        "--speaker_change_symbol",
+        "--added_tokens_file",
         type=str,
-        default="<sc>",
-        required=False,
-        help="Whether SOT-style training is used in Whisper",
+        default="none",
+        help="File of additional tokens to the Whisper tokenizer",
     )
 
     return parser

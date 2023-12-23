@@ -207,9 +207,9 @@ class CommonPreprocessor(AbsPreprocessor):
             else:
                 self.token_id_converter = OpenAIWhisperTokenIDConverter(
                     model_type=bpemodel,
-                    added_tokens_txt=non_linguistic_symbols,
                     language=whisper_language or "en",
                     task=whisper_task or "transcribe",
+                    added_tokens_file=non_linguistic_symbols,
                 )
         else:
             self.text_cleaner = None
@@ -661,26 +661,6 @@ class CommonPreprocessor_multi(CommonPreprocessor):
             assert (
                 len(self.text_name) == 1
             ), "SOT model with speaker_change_symbol only support single text input."
-
-            if bpemodel in ["whisper_en", "whisper_multilingual"]:
-                assert (
-                    len(speaker_change_symbol) == 1
-                ), "Currently, Whisper SOT only supports one SC token"
-                speaker_change_symbol = speaker_change_symbol[0]
-                self.tokenizer = OpenAIWhisperTokenizer(
-                    model_type=bpemodel,
-                    language=whisper_language or "en",
-                    task=whisper_task or "transcribe",
-                    sot=True,
-                    speaker_change_symbol=speaker_change_symbol,
-                )
-                self.token_id_converter = OpenAIWhisperTokenIDConverter(
-                    model_type=bpemodel,
-                    language=whisper_language or "en",
-                    task=whisper_task or "transcribe",
-                    sot=True,
-                    speaker_change_symbol=speaker_change_symbol,
-                )
 
     def _text_process(
         self, data: Dict[str, Union[str, np.ndarray]]
