@@ -1,0 +1,8 @@
+Scripts for Target-speaker Whisper models.
+Here, we use full-overlapped LibriMix dataset for experiments.
+
+In the data directory:
+- {dev,test,train,train_100} are prepared by default scripts, which means using a wav.scp
+file for mixture and different texts (text_spk1, text_spk2) for different speakers;
+- {dev_sglspk,test_sglspk,train_sglspk,train_100_sglspk} means each line is for a
+single speaker.

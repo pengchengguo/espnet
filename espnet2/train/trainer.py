@@ -1,4 +1,5 @@
 """Trainer module."""
+
 import argparse
 import dataclasses
 import logging
@@ -17,6 +18,7 @@ from packaging.version import parse as V
 from typeguard import check_argument_types
 
 from espnet2.iterators.abs_iter_factory import AbsIterFactory
+from espnet2.layers.create_lora_adapter import get_lora_state_dict
 from espnet2.main_funcs.average_nbest_models import average_nbest_models
 from espnet2.main_funcs.calculate_all_attentions import calculate_all_attentions
 from espnet2.schedulers.abs_scheduler import (
@@ -60,11 +62,6 @@ try:
     import fairscale
 except ImportError:
     fairscale = None
-
-try:
-    import loralib as lora
-except Exception:
-    lora = None
 
 
 @dataclasses.dataclass
@@ -212,8 +209,6 @@ class Trainer:
 
         use_lora = getattr(trainer_options, "use_lora", False)
         save_lora_only = getattr(trainer_options, "save_lora_only", False)
-        if use_lora and lora is None:
-            raise RuntimeError("Requiring loralib. Do 'pip install loralib'")
 
         if trainer_options.resume and (output_dir / "checkpoint.pth").exists():
             cls.resume(
@@ -224,7 +219,7 @@ class Trainer:
                 reporter=reporter,
                 scaler=scaler,
                 ngpu=trainer_options.ngpu,
-                strict=not use_lora,
+                strict=not save_lora_only,
             )
 
         start_epoch = reporter.get_epoch() + 1
@@ -361,7 +356,7 @@ class Trainer:
                 # 4. Save/Update the checkpoint
                 if use_lora and save_lora_only:
                     # Only the LoRA realted params are saved, not the whole model
-                    model_state_dict = lora.lora_state_dict(model)
+                    model_state_dict = get_lora_state_dict(model)
                 else:
                     # Save all params of the model
                     model_state_dict = model.state_dict()

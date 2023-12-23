@@ -207,9 +207,9 @@ class CommonPreprocessor(AbsPreprocessor):
             else:
                 self.token_id_converter = OpenAIWhisperTokenIDConverter(
                     model_type=bpemodel,
-                    added_tokens_txt=non_linguistic_symbols,
                     language=whisper_language or "en",
                     task=whisper_task or "transcribe",
+                    added_tokens_file=non_linguistic_symbols,
                 )
         else:
             self.text_cleaner = None
@@ -423,7 +423,7 @@ class CommonPreprocessor(AbsPreprocessor):
 
     def _text_process(
         self, data: Dict[str, Union[str, np.ndarray]]
-    ) -> Dict[str, np.ndarray]:
+    ) -> Dict[str, Union[str, np.ndarray]]:
         if self.text_name in data and self.tokenizer is not None:
             text = data[self.text_name]
             if isinstance(text, np.ndarray):
@@ -496,6 +496,182 @@ class CommonPreprocessor(AbsPreprocessor):
 
         data = self._speech_process(data)
         data = self._text_process(data)
+        return data
+
+
+class TgtSpkPreprocessor(CommonPreprocessor):
+    def __init__(
+        self,
+        train: bool,
+        train_spk2enroll: str = None,
+        use_lang_prompt: bool = False,
+        use_nlp_prompt: bool = False,
+        token_type: str = None,
+        token_list: Union[Path, str, Iterable[str]] = None,
+        bpemodel: Union[Path, str, Iterable[str]] = None,
+        text_cleaner: Collection[str] = None,
+        g2p_type: str = None,
+        unk_symbol: str = "<unk>",
+        space_symbol: str = "<space>",
+        non_linguistic_symbols: Union[Path, str, Iterable[str]] = None,
+        delimiter: str = None,
+        rir_scp: str = None,
+        rir_apply_prob: float = 1.0,
+        noise_scp: str = None,
+        noise_apply_prob: float = 1.0,
+        noise_db_range: str = "3_10",
+        short_noise_thres: float = 0.5,
+        aux_task_names: Collection[str] = None,
+        speech_volume_normalize: float = None,
+        speech_name: str = "speech",
+        text_name: str = "text",
+        enroll_name: str = "enroll",
+        enroll_embedding: bool = False,
+        enroll_segment: int = 0,
+        fs: int = 0,
+        nonsplit_symbol: Iterable[str] = None,
+        data_aug_effects: List = None,
+        data_aug_num: List[int] = [1, 1],
+        data_aug_prob: float = 0.0,
+        # only use for whisper
+        whisper_language: str = None,
+        whisper_task: str = None,
+    ):
+        super().__init__(
+            train=train,
+            token_type=token_type,
+            token_list=token_list,
+            bpemodel=bpemodel,
+            text_cleaner=text_cleaner,
+            g2p_type=g2p_type,
+            unk_symbol=unk_symbol,
+            space_symbol=space_symbol,
+            non_linguistic_symbols=non_linguistic_symbols,
+            delimiter=delimiter,
+            rir_scp=rir_scp,
+            rir_apply_prob=rir_apply_prob,
+            noise_scp=noise_scp,
+            noise_apply_prob=noise_apply_prob,
+            noise_db_range=noise_db_range,
+            short_noise_thres=short_noise_thres,
+            aux_task_names=aux_task_names,
+            speech_volume_normalize=speech_volume_normalize,
+            speech_name=speech_name,
+            text_name=text_name,
+            fs=fs,
+            nonsplit_symbol=nonsplit_symbol,
+            data_aug_effects=data_aug_effects,
+            data_aug_num=data_aug_num,
+            data_aug_prob=data_aug_prob,
+            whisper_language=whisper_language,
+            whisper_task=whisper_task,
+            use_lang_prompt=use_lang_prompt,
+            use_nlp_prompt=use_nlp_prompt,
+        )
+
+        self.enroll_name = enroll_name
+        # if true, use speaker embedding as enrollment instead of audio
+        self.enroll_embedding = enroll_embedding
+        # if specified, chomp the enrollment audio to a specific length
+        self.enroll_segment = enroll_segment
+
+        if train:
+            if train_spk2enroll is None:
+                logging.info("Use fixed enrollment for each sample.")
+                self.train_spk2enroll = None
+            else:
+                logging.info("Dynamically select enrollment for each sample.")
+                with open(train_spk2enroll, "r", encoding="utf-8") as f:
+                    # {spk_id: [[utt_id1, path1], [utt_id2, path2]]}
+                    self.train_spk2enroll = json.load(f)
+        else:
+            logging.info("Use fixed enrollment for each sample.")
+            self.train_spk2enroll = None
+
+    def __repr__(self):
+        name = self.__class__.__module__ + "." + self.__class__.__name__
+        msg = f"{name} (train={self.train}"
+        if self.train_spk2enroll:
+            msg += f", len(train_spk2enroll)={len(self.train_spk2enroll)}"
+        for key in ("enroll_name", "enroll_embedding", "enroll_segment"):
+            if getattr(self, key):
+                msg += f", {key}={getattr(self, key)}"
+        return msg + ")"
+
+    def _read_audio_segment(self, path, segment_len):
+        # audio: (Time, Nmic)
+        audio, sr = soundfile.read(path, dtype=np.float32, always_2d=True)
+        if segment_len <= 0 or len(audio) == segment_len:
+            audio = audio
+        elif len(audio) < segment_len:
+            offset = np.random.randint(0, segment_len - len(audio))
+            # Pad audio
+            audio = np.pad(
+                audio,
+                [(offset, segment_len - len(audio) - offset), (0, 0)],
+                mode="wrap",
+            )
+        else:
+            offset = np.random.randint(0, len(audio) - segment_len)
+            audio = audio[offset : offset + segment_len, :]
+
+        return audio[:, 0]
+
+    def _enroll_process(
+        self, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        assert check_argument_types()
+        if self.enroll_name in data:
+            enroll = data[self.enroll_name]
+            if isinstance(enroll, np.ndarray):
+                # for the compatibility of legacy implementation
+                # use speaker embedding as enrollment
+                # randomly choose one embedding during the training
+                random_idx = np.random.choice(enroll.shape[0])
+                enroll = enroll[random_idx]
+            elif isinstance(enroll, str):
+                # for the latest implementation
+                # use speaker embedding or audio as enrollment
+                if self.train and self.train_spk2enroll:
+                    # specical format in `enroll.scp`: MIX_ID *UTT_ID SPK_ID
+                    # dynamically select enrollment for each sample
+                    assert enroll.startswith("*"), enroll
+                    utt_id, spk_id = enroll[1:].strip().split(maxsplit=1)
+                    enroll_id, enroll_path = random.choice(
+                        self.train_spk2enroll[spk_id]
+                    )
+                    while utt_id == enroll_id or not Path(enroll_path).exists():
+                        enroll_id, enroll_path = random.choice(
+                            self.train_spk2enroll[spk_id]
+                        )
+                else:
+                    # normal format in `enroll.scp`: MIX_ID PATH/TO/ENROLLMENT
+                    # use fixed enrollment for each sample
+                    assert not enroll.startswith("*"), enroll
+                    enroll_path = enroll
+                if self.enroll_embedding:
+                    # use speaker embedding as enrollment
+                    enroll = np.load(enroll_path)
+                else:
+                    # use audio as enrollment
+                    enroll = self._read_audio_segment(enroll_path, self.enroll_segment)
+            else:
+                raise NotImplementedError(f"Not supported enroll type: {type(enroll)}")
+
+            data[self.enroll_name] = enroll
+
+        assert check_return_type(data)
+        return data
+
+    def __call__(
+        self, uid: str, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        assert check_argument_types()
+
+        data = self._speech_process(data)
+        data = self._text_process(data)
+        data = self._enroll_process(data)
+
         return data
 
 
@@ -662,26 +838,6 @@ class CommonPreprocessor_multi(CommonPreprocessor):
                 len(self.text_name) == 1
             ), "SOT model with speaker_change_symbol only support single text input."
 
-            if bpemodel in ["whisper_en", "whisper_multilingual"]:
-                assert (
-                    len(speaker_change_symbol) == 1
-                ), "Currently, Whisper SOT only supports one SC token"
-                speaker_change_symbol = speaker_change_symbol[0]
-                self.tokenizer = OpenAIWhisperTokenizer(
-                    model_type=bpemodel,
-                    language=whisper_language or "en",
-                    task=whisper_task or "transcribe",
-                    sot=True,
-                    speaker_change_symbol=speaker_change_symbol,
-                )
-                self.token_id_converter = OpenAIWhisperTokenIDConverter(
-                    model_type=bpemodel,
-                    language=whisper_language or "en",
-                    task=whisper_task or "transcribe",
-                    sot=True,
-                    speaker_change_symbol=speaker_change_symbol,
-                )
-
     def _text_process(
         self, data: Dict[str, Union[str, np.ndarray]]
     ) -> Dict[str, np.ndarray]:
@@ -751,9 +907,11 @@ class MutliTokenizerCommonPreprocessor(CommonPreprocessor):
             token_list=token_list[0],
             bpemodel=bpemodel[0],
             text_cleaner=text_cleaner,
-            g2p_type=g2p_type[0]
-            if type(g2p_type) is not str and g2p_type is not None
-            else g2p_type,
+            g2p_type=(
+                g2p_type[0]
+                if type(g2p_type) is not str and g2p_type is not None
+                else g2p_type
+            ),
             unk_symbol=unk_symbol,
             space_symbol=space_symbol,
             non_linguistic_symbols=non_linguistic_symbols,
@@ -802,9 +960,9 @@ class MutliTokenizerCommonPreprocessor(CommonPreprocessor):
                             if i < len(tokenizer_encode_conf)
                             else None
                         ),
-                        whisper_language=whisper_language[i]
-                        if "whisper" in token_type[i]
-                        else None,
+                        whisper_language=(
+                            whisper_language[i] if "whisper" in token_type[i] else None
+                        ),
                         whisper_task=whisper_task,
                     )
                 )

@@ -5,7 +5,7 @@ import logging
 import numbers
 import re
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Collection, Dict, Mapping, Tuple, Union
+from typing import Any, Callable, Collection, Dict, Mapping, Tuple, Union, List
 
 import h5py
 import humanfriendly
@@ -535,7 +535,9 @@ class ESPnetDataset(AbsDataset):
         _mes += f"\n  preprocess: {self.preprocess})"
         return _mes
 
-    def __getitem__(self, uid: Union[str, int]) -> Tuple[str, Dict[str, np.ndarray]]:
+    def __getitem__(
+        self, uid: Union[str, int]
+    ) -> Tuple[str, Dict[str, Union[np.ndarray, List[np.ndarray]]]]:
         assert check_argument_types()
 
         # Change integer-id to string-id
@@ -585,19 +587,28 @@ class ESPnetDataset(AbsDataset):
         # 3. Force data-precision
         for name in data:
             value = data[name]
-            if not isinstance(value, np.ndarray):
+            if isinstance(value, np.ndarray):
+                # Cast to desired type
+                if value.dtype.kind == "f":
+                    value = value.astype(self.float_dtype)
+                elif value.dtype.kind == "i":
+                    value = value.astype(self.int_dtype)
+                else:
+                    raise NotImplementedError(f"Not supported dtype: {value.dtype}")
+            elif isinstance(value, list):
+                # Cast to desired type
+                assert isinstance(value[0], np.ndarray)
+                if value[0].dtype.kind == "f":
+                    value = [v.astype(self.float_dtype) for v in value]
+                elif value[0].dtype.kind == "i":
+                    value = [v.astype(self.int_dtype) for v in value]
+                else:
+                    raise NotImplementedError(f"Not supported dtype: {value[0].dtype}")
+            else:
                 raise RuntimeError(
                     f"All values must be converted to np.ndarray object "
                     f'by preprocessing, but "{name}" is still {type(value)}.'
                 )
-
-            # Cast to desired type
-            if value.dtype.kind == "f":
-                value = value.astype(self.float_dtype)
-            elif value.dtype.kind == "i":
-                value = value.astype(self.int_dtype)
-            else:
-                raise NotImplementedError(f"Not supported dtype: {value.dtype}")
             data[name] = value
 
         if self.cache is not None and self.cache.size < self.max_cache_size:

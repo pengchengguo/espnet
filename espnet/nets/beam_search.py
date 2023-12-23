@@ -318,6 +318,7 @@ class BeamSearch(torch.nn.Module):
         running_hyps: List[Hypothesis],
         x: torch.Tensor,
         pre_x: torch.Tensor = None,
+        **kwargs,
     ) -> List[Hypothesis]:
         """Search new tokens for running hypotheses and encoded speech x.
 
@@ -388,6 +389,7 @@ class BeamSearch(torch.nn.Module):
         maxlenratio: float = 0.0,
         minlenratio: float = 0.0,
         pre_x: torch.Tensor = None,
+        speech_prompt: torch.Tensor = None,
     ) -> List[Hypothesis]:
         """Perform beam search.
 
@@ -404,6 +406,8 @@ class BeamSearch(torch.nn.Module):
             pre_x (torch.Tensor): Encoded speech feature for sequential attn (T, D)
                 Sequential attn computes attn first on pre_x then on x,
                 thereby attending to two sources in sequence.
+            speech_prompt (torch.Tensor): Encoded speech prompt feature (T, D),
+                such as speaker embedding, speaker prompt, etc.
 
         Returns:
             list[Hypothesis]: N-best decoding results
@@ -428,13 +432,20 @@ class BeamSearch(torch.nn.Module):
         logger.info("decoder input length: " + str(inp.shape[0]))
         logger.info("max output length: " + str(maxlen))
         logger.info("min output length: " + str(minlen))
+        if speech_prompt is not None:
+            logger.info("speech prompt length: " + str(speech_prompt.shape[0]))
 
         # main loop of prefix search
         running_hyps = self.init_hyp(x if pre_x is None else pre_x)
         ended_hyps = []
         for i in range(maxlen):
             logger.debug("position " + str(i))
-            best = self.search(running_hyps, x, pre_x=pre_x)
+            best = self.search(
+                running_hyps,
+                x,
+                pre_x=pre_x,
+                speech_prompt=speech_prompt if speech_prompt is not None else None,
+            )
             # post process of one iteration
             running_hyps = self.post_process(
                 i, maxlen, minlen, maxlenratio, best, ended_hyps

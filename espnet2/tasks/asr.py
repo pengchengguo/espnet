@@ -6,6 +6,7 @@ import numpy as np
 import torch
 from typeguard import check_argument_types, check_return_type
 
+from espnet2.asr.adapter.qformer_adapter import QFormerAdapter
 from espnet2.asr.ctc import CTC
 from espnet2.asr.decoder.abs_decoder import AbsDecoder
 from espnet2.asr.decoder.hugging_face_transformers_decoder import (  # noqa: H301
@@ -22,7 +23,10 @@ from espnet2.asr.decoder.transformer_decoder import (
     LightweightConvolutionTransformerDecoder,
     TransformerDecoder,
 )
-from espnet2.asr.decoder.whisper_decoder import OpenAIWhisperDecoder
+from espnet2.asr.decoder.whisper_decoder import (
+    OpenAIWhisperDecoder,
+    QFormerTgtSpkWhisperDecoder_V2,
+)
 from espnet2.asr.encoder.abs_encoder import AbsEncoder
 from espnet2.asr.encoder.avhubert_encoder import FairseqAVHubertEncoder
 from espnet2.asr.encoder.branchformer_encoder import BranchformerEncoder
@@ -40,6 +44,7 @@ from espnet2.asr.encoder.hubert_encoder import (
     TorchAudioHuBERTPretrainEncoder,
 )
 from espnet2.asr.encoder.longformer_encoder import LongformerEncoder
+from espnet2.asr.encoder.mc_whisper_encoder import MultichannelWhisperEncoder
 from espnet2.asr.encoder.rnn_encoder import RNNEncoder
 from espnet2.asr.encoder.transformer_encoder import TransformerEncoder
 from espnet2.asr.encoder.transformer_encoder_multispkr import (
@@ -47,7 +52,11 @@ from espnet2.asr.encoder.transformer_encoder_multispkr import (
 )
 from espnet2.asr.encoder.vgg_rnn_encoder import VGGRNNEncoder
 from espnet2.asr.encoder.wav2vec2_encoder import FairSeqWav2Vec2Encoder
-from espnet2.asr.encoder.whisper_encoder import OpenAIWhisperEncoder
+from espnet2.asr.encoder.whisper_encoder import (
+    OpenAIWhisperEncoder,
+    TgtSpkWhisperEncoder,
+    QFormerTgtSpkWhisperEncoder_V2,
+)
 from espnet2.asr.espnet_model import ESPnetASRModel
 from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.frontend.default import DefaultFrontend
@@ -58,6 +67,7 @@ from espnet2.asr.frontend.windowing import SlidingWindow
 from espnet2.asr.maskctc_model import MaskCTCModel
 from espnet2.asr.pit_espnet_model import ESPnetASRModel as PITESPnetModel
 from espnet2.asr.postencoder.abs_postencoder import AbsPostEncoder
+from espnet2.asr.postencoder.feedforward_postencoder import FeedForwardPostEncoder
 from espnet2.asr.postencoder.hugging_face_transformers_postencoder import (
     HuggingFaceTransformersPostEncoder,
 )
@@ -67,6 +77,9 @@ from espnet2.asr.preencoder.linear import LinearProjection
 from espnet2.asr.preencoder.sinc import LightweightSincConvs
 from espnet2.asr.specaug.abs_specaug import AbsSpecAug
 from espnet2.asr.specaug.specaug import SpecAug
+from espnet2.asr.ts_qformer_espnet_model import (
+    TgtSpkQformerESPnetASRModel_V4,
+)
 from espnet2.asr_transducer.joint_network import JointNetwork
 from espnet2.layers.abs_normalize import AbsNormalize
 from espnet2.layers.global_mvn import GlobalMVN
@@ -81,6 +94,7 @@ from espnet2.train.preprocessor import (
     AbsPreprocessor,
     CommonPreprocessor,
     CommonPreprocessor_multi,
+    TgtSpkPreprocessor,
 )
 from espnet2.train.trainer import Trainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
@@ -124,6 +138,7 @@ model_choices = ClassChoices(
         espnet=ESPnetASRModel,
         maskctc=MaskCTCModel,
         pit_espnet=PITESPnetModel,
+        ts_qformer_v4=TgtSpkQformerESPnetASRModel_V4,
     ),
     type_check=AbsESPnetModel,
     default="espnet",
@@ -155,6 +170,9 @@ encoder_choices = ClassChoices(
         longformer=LongformerEncoder,
         branchformer=BranchformerEncoder,
         whisper=OpenAIWhisperEncoder,
+        tgtspk_whisper=TgtSpkWhisperEncoder,
+        qformer_whisper_v2=QFormerTgtSpkWhisperEncoder_V2,
+        mc_whisper=MultichannelWhisperEncoder,
         e_branchformer=EBranchformerEncoder,
         avhubert=FairseqAVHubertEncoder,
     ),
@@ -166,6 +184,7 @@ postencoder_choices = ClassChoices(
     classes=dict(
         hugging_face_transformers=HuggingFaceTransformersPostEncoder,
         length_adaptor=LengthAdaptorPostEncoder,
+        linear=FeedForwardPostEncoder,
     ),
     type_check=AbsPostEncoder,
     default=None,
@@ -183,6 +202,7 @@ decoder_choices = ClassChoices(
         transducer=TransducerDecoder,
         mlm=MLMDecoder,
         whisper=OpenAIWhisperDecoder,
+        qformer_whisper_v2=QFormerTgtSpkWhisperDecoder_V2,
         hugging_face_transformers=HuggingFaceTransformersDecoder,
         s4=S4Decoder,
     ),
@@ -195,9 +215,25 @@ preprocessor_choices = ClassChoices(
     classes=dict(
         default=CommonPreprocessor,
         multi=CommonPreprocessor_multi,
+        tgtspk=TgtSpkPreprocessor,
     ),
     type_check=AbsPreprocessor,
     default="default",
+)
+# Optional modules for target speaker ASR task
+spkencoder_choices = ClassChoices(
+    "spkencoder",
+    classes=dict(
+        transformer=TransformerEncoder,
+    ),
+    default=None,
+)
+adapter_choices = ClassChoices(
+    "adapter",
+    classes=dict(
+        qformer=QFormerAdapter,
+    ),
+    default=None,
 )
 
 
@@ -225,6 +261,11 @@ class ASRTask(AbsTask):
         decoder_choices,
         # --preprocessor and --preprocessor_conf
         preprocessor_choices,
+        # optional modules for target speaker ASR
+        # --spkencoder and --spkencoder_conf
+        spkencoder_choices,
+        # --spk_adapter and --spk_adapter_conf
+        adapter_choices,
     ]
 
     # If you need to modify train() or eval() procedures, change Trainer class here
@@ -278,6 +319,12 @@ class ASRTask(AbsTask):
             action=NestedDictAction,
             default=None,
             help="The keyword arguments for joint network class.",
+        )
+        group.add_argument(
+            "--tgtspk_asr",
+            type=str2bool,
+            default=False,
+            help="Whether to perform target speaker ASR.",
         )
 
         group = parser.add_argument_group(description="Preprocess related")
@@ -403,9 +450,7 @@ class ASRTask(AbsTask):
             class_choices.add_arguments(group)
 
     @classmethod
-    def build_collate_fn(
-        cls, args: argparse.Namespace, train: bool
-    ) -> Callable[
+    def build_collate_fn(cls, args: argparse.Namespace, train: bool) -> Callable[
         [Collection[Tuple[str, Dict[str, np.ndarray]]]],
         Tuple[List[str], Dict[str, torch.Tensor]],
     ]:
@@ -438,32 +483,34 @@ class ASRTask(AbsTask):
                 g2p_type=args.g2p,
                 # NOTE(kamo): Check attribute existence for backward compatibility
                 rir_scp=args.rir_scp if hasattr(args, "rir_scp") else None,
-                rir_apply_prob=args.rir_apply_prob
-                if hasattr(args, "rir_apply_prob")
-                else 1.0,
+                rir_apply_prob=(
+                    args.rir_apply_prob if hasattr(args, "rir_apply_prob") else 1.0
+                ),
                 noise_scp=args.noise_scp if hasattr(args, "noise_scp") else None,
-                noise_apply_prob=args.noise_apply_prob
-                if hasattr(args, "noise_apply_prob")
-                else 1.0,
-                noise_db_range=args.noise_db_range
-                if hasattr(args, "noise_db_range")
-                else "13_15",
-                short_noise_thres=args.short_noise_thres
-                if hasattr(args, "short_noise_thres")
-                else 0.5,
-                speech_volume_normalize=args.speech_volume_normalize
-                if hasattr(args, "rir_scp")
-                else None,
-                aux_task_names=args.aux_ctc_tasks
-                if hasattr(args, "aux_ctc_tasks")
-                else None,
-                use_lang_prompt=args.use_lang_prompt
-                if hasattr(args, "use_lang_prompt")
-                else None,
+                noise_apply_prob=(
+                    args.noise_apply_prob if hasattr(args, "noise_apply_prob") else 1.0
+                ),
+                noise_db_range=(
+                    args.noise_db_range if hasattr(args, "noise_db_range") else "13_15"
+                ),
+                short_noise_thres=(
+                    args.short_noise_thres
+                    if hasattr(args, "short_noise_thres")
+                    else 0.5
+                ),
+                speech_volume_normalize=(
+                    args.speech_volume_normalize if hasattr(args, "rir_scp") else None
+                ),
+                aux_task_names=(
+                    args.aux_ctc_tasks if hasattr(args, "aux_ctc_tasks") else None
+                ),
+                use_lang_prompt=(
+                    args.use_lang_prompt if hasattr(args, "use_lang_prompt") else None
+                ),
                 **args.preprocessor_conf,
-                use_nlp_prompt=args.use_nlp_prompt
-                if hasattr(args, "use_nlp_prompt")
-                else None,
+                use_nlp_prompt=(
+                    args.use_nlp_prompt if hasattr(args, "use_nlp_prompt") else None
+                ),
             )
         else:
             retval = None
@@ -607,6 +654,19 @@ class ASRTask(AbsTask):
             odim=vocab_size, encoder_output_size=encoder_output_size, **args.ctc_conf
         )
 
+        # 7. Optional modules
+        optional_module = {}
+        if args.tgtspk_asr:
+            if args.spkencoder is not None:
+                spkencoder_class = spkencoder_choices.get_class(args.spkencoder)
+                spkencoder = spkencoder_class(**args.spkencoder_conf)
+                optional_module["spkencoder"] = spkencoder
+
+            if args.adapter is not None:
+                adapter_class = adapter_choices.get_class(args.adapter)
+                adapter = adapter_class(encoder_output_size, **args.adapter_conf)
+                optional_module["adapter"] = adapter
+
         # 7. Build model
         try:
             model_class = model_choices.get_class(args.model)
@@ -625,6 +685,7 @@ class ASRTask(AbsTask):
             joint_network=joint_network,
             token_list=token_list,
             **args.model_conf,
+            **optional_module,
         )
 
         # FIXME(kamo): Should be done in model?

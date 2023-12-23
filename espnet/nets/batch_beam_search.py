@@ -163,6 +163,7 @@ class BatchBeamSearch(BeamSearch):
         hyp: BatchHypothesis,
         x: torch.Tensor,
         pre_x: torch.Tensor = None,
+        speech_prompt: torch.Tensor = None,
     ) -> Tuple[Dict[str, torch.Tensor], Dict[str, Any]]:
         """Score new hypothesis by `self.full_scorers`.
 
@@ -172,6 +173,7 @@ class BatchBeamSearch(BeamSearch):
             pre_x (torch.Tensor): Encoded speech feature for sequential attn (T, D)
                 Sequential attn computes attn first on pre_x then on x,
                 thereby attending to two sources in sequence.
+            speech_prompt (torch.Tensor): Encoded speech prompt feature (T, D)
 
         Returns:
             Tuple[Dict[str, torch.Tensor], Dict[str, Any]]: Tuple of
@@ -190,6 +192,10 @@ class BatchBeamSearch(BeamSearch):
                 )
             elif "decoder" in k and pre_x is not None:
                 scores[k], states[k] = d.batch_score(hyp.yseq, hyp.states[k], x, pre_x)
+            elif "decoder" in k and speech_prompt is not None:
+                scores[k], states[k] = d.batch_score(
+                    hyp.yseq, hyp.states[k], x, speech_prompt=speech_prompt
+                )
             else:
                 scores[k], states[k] = d.batch_score(hyp.yseq, hyp.states[k], x)
 
@@ -261,6 +267,7 @@ class BatchBeamSearch(BeamSearch):
         running_hyps: BatchHypothesis,
         x: torch.Tensor,
         pre_x: torch.Tensor = None,
+        speech_prompt: torch.Tensor = None,
     ) -> BatchHypothesis:
         """Search new tokens for running hypotheses and encoded speech x.
 
@@ -268,6 +275,7 @@ class BatchBeamSearch(BeamSearch):
             running_hyps (BatchHypothesis): Running hypotheses on beam
             x (torch.Tensor): Encoded speech feature (T, D)
             pre_x (torch.Tensor): Encoded speech feature for sequential attention (T, D)
+            speech_prompt (torch.Tensor): Encoded speech prompt feature (T, D)
 
         Returns:
             BatchHypothesis: Best sorted hypotheses
@@ -283,17 +291,18 @@ class BatchBeamSearch(BeamSearch):
             hs, scores, states = self.score_full(
                 running_hyps,
                 x.expand(n_batch, *x.shape),
-                pre_x=pre_x.expand(n_batch, *pre_x.shape)
-                if pre_x is not None
-                else None,
+                pre_x=(
+                    pre_x.expand(n_batch, *pre_x.shape) if pre_x is not None else None
+                ),
             )
         else:
             scores, states = self.score_full(
                 running_hyps,
                 x.expand(n_batch, *x.shape),
-                pre_x=pre_x.expand(n_batch, *pre_x.shape)
-                if pre_x is not None
-                else None,
+                pre_x=(
+                    pre_x.expand(n_batch, *pre_x.shape) if pre_x is not None else None
+                ),
+                speech_prompt=speech_prompt if speech_prompt is not None else None,
             )
 
         for k in self.full_scorers:

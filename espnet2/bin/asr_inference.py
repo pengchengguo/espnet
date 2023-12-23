@@ -110,6 +110,7 @@ class Speech2Text:
         hugging_face_decoder_conf: Dict[str, Any] = {},
         time_sync: bool = False,
         multi_asr: bool = False,
+        tgtspk_infer: bool = False,
         lid_prompt: bool = False,
         lang_prompt_token: Optional[str] = None,
         nlp_prompt_token: Optional[str] = None,
@@ -275,17 +276,17 @@ class Speech2Text:
             hugging_face_model.to(device=device).eval()
 
             if "num_beams" not in hugging_face_decoder_conf:
-                hugging_face_decoder_conf[
-                    "num_beams"
-                ] = hugging_face_model.config.num_beams
+                hugging_face_decoder_conf["num_beams"] = (
+                    hugging_face_model.config.num_beams
+                )
 
             if (
                 hugging_face_model.config.pad_token_id is None
                 and "pad_token_id" not in hugging_face_decoder_conf
             ):
-                hugging_face_decoder_conf[
-                    "pad_token_id"
-                ] = hugging_face_model.config.eos_token_id
+                hugging_face_decoder_conf["pad_token_id"] = (
+                    hugging_face_model.config.eos_token_id
+                )
 
             beam_search = None
             beam_search_transducer = None
@@ -374,28 +375,26 @@ class Speech2Text:
         preprocessor_conf = getattr(asr_train_args, "preprocessor_conf", {})
         whisper_language = preprocessor_conf.get("whisper_language", None)
         whisper_task = preprocessor_conf.get("whisper_task", None)
+        added_tokens_file = getattr(asr_train_args, "non_linguistic_symbols", "none")
 
         if token_type is None:
             tokenizer = None
-        elif token_type == "bpe" or token_type == "hugging_face":
+        elif (
+            token_type == "bpe"
+            or token_type == "hugging_face"
+            or "whisper" in token_type
+        ):
             if bpemodel is not None:
+                # TODO(pcguo): consider param prompt_token_file
                 tokenizer = build_tokenizer(
                     token_type=token_type,
                     bpemodel=bpemodel,
+                    whisper_language=whisper_language,
+                    whisper_task=whisper_task,
+                    non_linguistic_symbols=added_tokens_file,
                 )
             else:
                 tokenizer = None
-        elif "whisper" in token_type:
-            tokenizer_language = asr_train_args.preprocessor_conf.get(
-                "tokenizer_language", "en"
-            )
-            tokenizer = build_tokenizer(
-                token_type=token_type,
-                bpemodel=bpemodel,
-                whisper_language=whisper_language,
-                whisper_task=whisper_task,
-                non_linguistic_symbols=prompt_token_file,
-            )
         else:
             tokenizer = build_tokenizer(token_type=token_type)
 
@@ -404,16 +403,12 @@ class Speech2Text:
         elif bpemodel not in ["whisper_en", "whisper_multilingual"]:
             converter = TokenIDConverter(token_list=token_list)
         else:
-            if "speaker_change_symbol" in preprocessor_conf:
-                sot_asr = True
-            else:
-                sot_asr = False
+            # TODO(pcguo): consider param prompt_token_file
             converter = OpenAIWhisperTokenIDConverter(
                 model_type=bpemodel,
-                added_tokens_txt=prompt_token_file,
                 language=whisper_language or "en",
                 task=whisper_task or "transcribe",
-                sot=sot_asr,
+                added_tokens_file=added_tokens_file,
             )
             beam_search.set_hyp_primer(
                 list(converter.tokenizer.sot_sequence_including_notimestamps)
@@ -461,11 +456,10 @@ class Speech2Text:
         self.nbest = nbest
         self.enh_s2t_task = enh_s2t_task
         self.multi_asr = multi_asr
+        self.tgtspk_infer = tgtspk_infer
 
     @torch.no_grad()
-    def __call__(
-        self, speech: Union[torch.Tensor, np.ndarray]
-    ) -> Union[
+    def __call__(self, speech: Union[torch.Tensor, np.ndarray], **kwargs) -> Union[
         ListOfHypothesis,
         Tuple[
             ListOfHypothesis,
@@ -493,13 +487,30 @@ class Speech2Text:
         batch = {"speech": speech, "speech_lengths": lengths}
         logging.info("speech length: " + str(speech.size(1)))
 
+        # additional input
+        for key in kwargs:
+            # data: (Nsamples,) -> (1, Nsamples)
+            other = kwargs[key].unsqueeze(0).to(getattr(torch, self.dtype))
+            # lengths: (1,)
+            other_lengths = other.new_full(
+                [1], dtype=torch.long, fill_value=other.size(1)
+            )
+            batch.update({f"{key}": other, f"{key}_lengths": other_lengths})
+            logging.info(f"additional input: {key}")
+
         # a. To device
         batch = to_device(batch, device=self.device)
 
         # b. Forward Encoder
-        enc, enc_olens = self.asr_model.encode(**batch)
+        if self.tgtspk_infer:
+            enc, enc_olens, speech_prompt, _ = self.asr_model.encode(**batch)
+        else:
+            enc, enc_olens = self.asr_model.encode(**batch)
+            speech_prompt = None
+
         if self.multi_asr:
             enc = enc.unbind(dim=1)  # (batch, num_inf, ...) -> num_inf x [batch, ...]
+
         if self.enh_s2t_task or self.multi_asr:
             # Enh+ASR joint task or Multispkr ASR task
             # NOTE (Wangyou): the return type in this case is List[default_return_type]
@@ -529,7 +540,7 @@ class Speech2Text:
             assert len(enc) == 1, len(enc)
 
             # c. Passed the encoder result and the beam search
-            results = self._decode_single_sample(enc[0])
+            results = self._decode_single_sample(enc[0], speech_prompt=speech_prompt)
 
             # Encoder intermediate CTC predictions
             if intermediate_outs is not None:
@@ -557,7 +568,9 @@ class Speech2Text:
 
         return res
 
-    def _decode_single_sample(self, enc: torch.Tensor):
+    def _decode_single_sample(
+        self, enc: torch.Tensor, speech_prompt: torch.Tensor = None
+    ):
         if self.beam_search_transducer:
             logging.info("encoder output length: " + str(enc.shape[0]))
             nbest_hyps = self.beam_search_transducer(enc)
@@ -623,7 +636,10 @@ class Speech2Text:
                         if hasattr(module, "setup_step"):
                             module.setup_step()
             nbest_hyps = self.beam_search(
-                x=enc, maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
+                x=enc,
+                maxlenratio=self.maxlenratio,
+                minlenratio=self.minlenratio,
+                speech_prompt=speech_prompt,
             )
 
         nbest_hyps = nbest_hyps[: self.nbest]
@@ -725,6 +741,7 @@ def inference(
     hugging_face_decoder_conf: Dict[str, Any],
     time_sync: bool,
     multi_asr: bool,
+    tgtspk_infer: bool,
     lang_prompt_token: Optional[str],
     nlp_prompt_token: Optional[str],
     prompt_token_file: Optional[str],
@@ -774,6 +791,7 @@ def inference(
         streaming=streaming,
         enh_s2t_task=enh_s2t_task,
         multi_asr=multi_asr,
+        tgtspk_infer=tgtspk_infer,
         quantize_asr_model=quantize_asr_model,
         quantize_lm=quantize_lm,
         quantize_modules=quantize_modules,
@@ -870,9 +888,9 @@ def inference(
                 ibest_writer = writer[f"1best_recog"]
                 if encoder_interctc_res is not None:
                     for idx, text in encoder_interctc_res.items():
-                        ibest_writer[f"encoder_interctc_layer{idx}.txt"][
-                            key
-                        ] = " ".join(text)
+                        ibest_writer[f"encoder_interctc_layer{idx}.txt"][key] = (
+                            " ".join(text)
+                        )
 
 
 def get_parser():
@@ -976,6 +994,12 @@ def get_parser():
         default=False,
         help="Whether we are using a monolithic multi-speaker ASR model "
         "(This flag should be False if a speech separation model is used before ASR)",
+    )
+    group.add_argument(
+        "--tgtspk_infer",
+        type=str2bool,
+        default=False,
+        help="Whether to do target speaker inference with target speaker enrollment.",
     )
     group = parser.add_argument_group("Quantization related")
     group.add_argument(

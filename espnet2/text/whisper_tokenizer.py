@@ -1,5 +1,5 @@
 import copy
-import os
+import codecs
 from typing import Iterable, List
 
 from typeguard import check_argument_types
@@ -32,7 +32,6 @@ LANGUAGES_CODE_MAPPING = {
     "zh-CN": "chinese",
     "zh-HK": "chinese",
 }
-dirname = os.path.dirname(__file__)
 
 
 class OpenAIWhisperTokenizer(AbsTokenizer):
@@ -41,9 +40,7 @@ class OpenAIWhisperTokenizer(AbsTokenizer):
         model_type: str,
         language: str = "en",
         task: str = "transcribe",
-        sot: bool = False,
-        speaker_change_symbol: str = "<sc>",
-        added_tokens_txt: str = None,
+        added_tokens_file: str = None,
     ):
         assert check_argument_types()
 
@@ -72,26 +69,21 @@ class OpenAIWhisperTokenizer(AbsTokenizer):
             self.tokenizer = whisper.tokenizer.get_tokenizer(
                 multilingual=True, language=self.language, task=self.task
             )
-            if added_tokens_txt is not None:
-                _added_tokens = []
-                with open(added_tokens_txt) as f:
-                    lines = f.readlines()
-                    for line in lines:
-                        _added_tokens.append(line.rstrip())
-                self.tokenizer.tokenizer.add_tokens(_added_tokens)
         else:
             raise ValueError("tokenizer unsupported:", model_type)
 
-        self.tokenizer = copy.deepcopy(self.tokenizer)
+        # self.tokenizer = copy.deepcopy(self.tokenizer)
         # Whisper uses discrete tokens (20ms) to encode timestamp
         timestamps = [f"<|{i*0.02:.2f}|>" for i in range(0, 1501)]
-        sc = [speaker_change_symbol] if sot else []
-        special_tokens = (
-            self.tokenizer.tokenizer.additional_special_tokens + timestamps + sc
-        )
-        self.tokenizer.tokenizer.add_special_tokens(
-            dict(additional_special_tokens=special_tokens)
-        )
+
+        # load custom defined tokens
+        added_tokens_lst = []
+        if added_tokens_file is not None:
+            with codecs.open(added_tokens_file, "r", "utf-8") as fin:
+                for line in fin.readlines():
+                    added_tokens_lst.append(line.rstrip())
+
+        self.tokenizer.tokenizer.add_tokens(timestamps + added_tokens_lst)
 
     def __repr__(self):
         return (
