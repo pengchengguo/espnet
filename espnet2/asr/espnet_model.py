@@ -68,6 +68,7 @@ class ESPnetASRModel(AbsESPnetModel):
         sym_eos: str = "<sos/eos>",
         extract_feats_in_collect_stats: bool = True,
         lang_token_id: int = -1,
+        tgtspk_asr: bool = False,
     ):
         assert check_argument_types()
         assert 0.0 <= ctc_weight <= 1.0, ctc_weight
@@ -201,6 +202,8 @@ class ESPnetASRModel(AbsESPnetModel):
         else:
             self.lang_token_id = None
 
+        self.tgtspk_asr = tgtspk_asr
+
     def forward(
         self,
         speech: torch.Tensor,
@@ -218,6 +221,15 @@ class ESPnetASRModel(AbsESPnetModel):
             text_lengths: (Batch,)
             kwargs: "utt_id" is among the input.
         """
+        if self.tgtspk_asr:
+            # get speaker enrollment from the input
+            enroll = kwargs.get("enroll", None)
+            assert (
+                enroll is not None
+            ), f"Missing speaker enrollment for target speaker ASR"
+        else:
+            enroll = None
+
         assert text_lengths.dim() == 1, text_lengths.shape
         # Check that batch_size is unified
         assert (
@@ -226,6 +238,9 @@ class ESPnetASRModel(AbsESPnetModel):
             == text.shape[0]
             == text_lengths.shape[0]
         ), (speech.shape, speech_lengths.shape, text.shape, text_lengths.shape)
+        if enroll is not None:
+            assert speech.shape[0] == enroll.shape[0], (speech.shape, enroll.shape)
+
         batch_size = speech.shape[0]
 
         text[text == -1] = self.ignore_id
@@ -234,7 +249,9 @@ class ESPnetASRModel(AbsESPnetModel):
         text = text[:, : text_lengths.max()]
 
         # 1. Encoder
-        encoder_out, encoder_out_lens = self.encode(speech, speech_lengths)
+        encoder_out, encoder_out_lens = self.encode(
+            speech, speech_lengths, enroll=enroll
+        )
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
             intermediate_outs = encoder_out[1]
@@ -329,7 +346,7 @@ class ESPnetASRModel(AbsESPnetModel):
             # 2b. Attention decoder branch
             if self.ctc_weight != 1.0:
                 loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-                    encoder_out, encoder_out_lens, text, text_lengths
+                    encoder_out, encoder_out_lens, text, text_lengths, enroll=enroll
                 )
 
             # 3. CTC-Att loss definition
@@ -365,13 +382,17 @@ class ESPnetASRModel(AbsESPnetModel):
         return {"feats": feats, "feats_lengths": feats_lengths}
 
     def encode(
-        self, speech: torch.Tensor, speech_lengths: torch.Tensor
+        self,
+        speech: torch.Tensor,
+        speech_lengths: torch.Tensor,
+        enroll: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_inference.py
 
         Args:
             speech: (Batch, Length, ...)
             speech_lengths: (Batch, )
+            enroll: (Batch, Dim) or None
         """
         with autocast(False):
             # 1. Extract feats
@@ -399,7 +420,12 @@ class ESPnetASRModel(AbsESPnetModel):
                 feats, feats_lengths, ctc=self.ctc
             )
         else:
-            encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths)
+            if self.tgtspk_asr:
+                encoder_out, encoder_out_lens, _ = self.encoder(
+                    feats, feats_lengths, enroll=enroll
+                )
+            else:
+                encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths)
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
             intermediate_outs = encoder_out[1]
@@ -539,6 +565,7 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
+        enroll: torch.Tensor = None,
     ):
         if hasattr(self, "lang_token_id") and self.lang_token_id is not None:
             ys_pad = torch.cat(

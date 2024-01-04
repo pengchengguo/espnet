@@ -170,6 +170,7 @@ class OpenAIWhisperEncoder(AbsEncoder):
         xs_pad: torch.Tensor,
         ilens: torch.Tensor,
         prev_states: torch.Tensor = None,
+        **kwargs,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         if self.do_pad_trim:
             xs_pad = self.pad_or_trim(xs_pad, self.pad_samples)
@@ -184,3 +185,221 @@ class OpenAIWhisperEncoder(AbsEncoder):
         xs_pad, olens = self.whisper_encode(feats, feats_lens)
 
         return xs_pad, olens, None
+
+
+class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
+    """Target speaker adapted Whisper Encoder."""
+
+    def __init__(
+        self,
+        input_size: int = 1,
+        dropout_rate: float = 0,
+        whisper_model: str = "small",
+        download_dir: str = None,
+        use_specaug: bool = False,
+        specaug_conf: dict | None = None,
+        do_pad_trim: bool = False,
+        enroll_size: int = 512,
+        adapter_method: str = "cat",
+        adapter_position: str = "cnn",
+        adapter_normalize: bool = True,
+    ):
+        super().__init__(
+            input_size,
+            dropout_rate,
+            whisper_model,
+            download_dir,
+            use_specaug,
+            specaug_conf,
+            do_pad_trim,
+        )
+
+        assert adapter_position == "cnn" or adapter_position.startswith("enc")
+        self.adapter_position = adapter_position
+        self.adapter = SpkAdapter(
+            enroll_size,
+            self.encoders.conv2.out_channels,
+            adapter_method,
+            adapter_normalize,
+        )
+
+    def whisper_encode(
+        self,
+        input: torch.Tensor,
+        ilens: torch.Tensor,
+        enroll: torch.Tensor,
+    ) -> torch.Tensor:
+        x = F.gelu(self.encoders.conv1(input))
+        x = F.gelu(self.encoders.conv2(x))
+        x = x.permute(0, 2, 1)
+
+        n_frames = x.size(1)
+        max_pos = self.encoders.positional_embedding.size(0)
+        if n_frames <= max_pos:
+            x = (x + self.encoders.positional_embedding[: x.size(1), :]).to(x.dtype)
+        else:
+            # due to positional encoding, audios >30 sec won't be accepted
+            x = x[:, :max_pos, :] + self.encoders.positional_embedding
+
+        enroll = enroll.unsqueeze(1).expand(-1, x.size(1), -1)
+
+        if self.adapter_position == "cnn":
+            # do target speaker adaptation on the CNN features
+            x = self.adapter(x, enroll)
+
+        x = self.dropout(x)
+
+        for layer, block in enumerate(self.encoders.blocks):
+            x = block(x)
+
+            if (
+                self.adapter_position.startswith("enc")
+                and int(self.adapter_position.split(":")[-1]) == layer
+            ):
+                # do target speaker adaptation on the inter encoder outputs
+                x = self.adapter(x, enroll)
+
+            if layer < len(self.encoders.blocks) - 1:
+                x = self.dropout(x)
+
+        x = self.encoders.ln_post(x)
+
+        if ilens is not None:
+            olens = (
+                1
+                + (
+                    ilens
+                    - self.encoders.conv2.kernel_size[0]
+                    + 2 * self.encoders.conv2.padding[0]
+                )
+                // self.encoders.conv2.stride[0]
+            )
+            olens = torch.clamp(olens, max=max_pos)
+        else:
+            olens = None
+
+        return x, olens
+
+    def forward(
+        self,
+        xs_pad: torch.Tensor,
+        ilens: torch.Tensor,
+        enroll: torch.Tensor,
+        prev_states: torch.Tensor = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        if self.do_pad_trim:
+            xs_pad = self.pad_or_trim(xs_pad, self.pad_samples)
+
+        feats, feats_lens = self.log_mel_spectrogram(xs_pad, ilens)
+
+        if self.specaug is not None and self.encoders.training:
+            feats = torch.transpose(feats, 1, 2)
+            feats, feats_lens = self.specaug(feats, feats_lens)
+            feats = torch.transpose(feats, 1, 2)
+
+        xs_pad, olens = self.whisper_encode(feats, feats_lens, enroll)
+
+        return xs_pad, olens, None
+
+
+class SpkAdapter(torch.nn.Module):
+    """Target speaker adaptation for Whisper encoder."""
+
+    def __init__(
+        self,
+        enroll_size: int,
+        hidden_size: int,
+        adapter_method: str = "cat",
+        adapter_normalize: bool = True,
+    ):
+        super().__init__()
+
+        assert adapter_method in ["cat", "additive", "film", "cln"]
+        self.adapter_method = adapter_method
+        if adapter_method == "cat":
+            self.adapter = torch.nn.Sequential(
+                torch.nn.Linear(hidden_size + enroll_size, hidden_size),
+            )
+        elif adapter_method == "additive":
+            linear_size = 2 * enroll_size
+            self.adapter = torch.nn.Sequential(
+                torch.nn.Linear(enroll_size, linear_size),
+                torch.nn.GELU(),
+                torch.nn.Linear(linear_size, hidden_size),
+            )
+        elif adapter_method == "film":
+            self.adapter = FiLM(enroll_size, hidden_size)
+        else:
+            raise NotImplementedError(f"Not supported adapter: {adapter_method}")
+
+        if adapter_normalize:
+            self.adapter_norm = torch.nn.LayerNorm(hidden_size)
+        else:
+            self.adapter_norm = None
+
+    def forward(self, x: torch.Tensor, enroll: torch.Tensor):
+        if self.adapter_method == "cat":
+            fused_emb = torch.cat([x, enroll], dim=-1)
+            x = x + self.adapter(fused_emb)
+        elif self.adapter_method == "additive":
+            x = x + self.adapter(enroll)
+        elif self.adapter_method == "film":
+            x = self.adapter(x, enroll)
+        else:
+            raise NotImplementedError(f"Not supported adapter: {self.adapter_method}")
+
+        if self.adapter_norm is not None:
+            x = self.adapter_norm(x)
+
+        return x
+
+
+class FiLM(torch.nn.Module):
+    """Feature-wise linear modulation (FiLM) layer.
+
+    URL: https://arxiv.org/pdf/1709.07871.pdf,
+         https://github.com/HuangZiliAndy/fairseq/tree/multispk
+    """
+
+    def __init__(
+        self,
+        enroll_size: torch.Tensor,
+        hidden_size: torch.Tensor,
+        num_layers: int = 1,
+    ) -> None:
+        super().__init__()
+
+        self.enroll_size = enroll_size
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+
+        gamma_lst, beta_lst = [], []
+        for i in range(num_layers):
+            if i == 0:
+                gamma_lst.append(torch.nn.Linear(enroll_size, hidden_size))
+                beta_lst.append(torch.nn.Linear(enroll_size, hidden_size))
+            else:
+                gamma_lst.append(torch.nn.Linear(hidden_size, hidden_size))
+                beta_lst.append(torch.nn.Linear(hidden_size, hidden_size))
+        self.gamma_lst = torch.nn.ModuleList(gamma_lst)
+        self.beta_lst = torch.nn.ModuleList(beta_lst)
+
+        self.init_weights()
+
+    def init_weights(self):
+        for layer in self.gamma_lst + self.beta_lst:
+            torch.nn.init.zeros_(layer.weight)
+            torch.nn.init.zeros_(layer.bias)
+
+    def forward(self, x: torch.Tensor, enroll: torch.Tensor):
+        for i in range(self.num_layers):
+            if i == 0:
+                gamma = self.gamma_lst[i](enroll)
+                beta = self.beta_lst[i](enroll)
+            else:
+                gamma = self.gamma_lst[i](gamma)
+                beta = self.beta_lst[i](beta)
+
+        x = (1 + gamma) * x + beta
+
+        return x

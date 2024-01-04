@@ -216,24 +216,67 @@ def common_collate_fn(
         # NOTE(kamo):
         # Each models, which accepts these values finally, are responsible
         # to repaint the pad_value to the desired value for each tasks.
-        if data[0][key].dtype.kind == "i":
-            pad_value = int_pad_value
+        if isinstance(data[0][key], np.ndarray):
+            if data[0][key].dtype.kind == "i":
+                pad_value = int_pad_value
+            else:
+                pad_value = float_pad_value
+        elif isinstance(data[0][key], list):
+            assert isinstance(data[0][key][0], np.ndarray)
+            if data[0][key][0].dtype.kind == "i":
+                pad_value = int_pad_value
+            else:
+                pad_value = float_pad_value
         else:
-            pad_value = float_pad_value
+            raise NotImplementedError(f"Unsupported type {type(data[0][key])}")
 
         array_list = [d[key] for d in data]
 
-        # Assume the first axis is length:
-        # tensor_list: Batch x (Length, ...)
-        tensor_list = [torch.from_numpy(a) for a in array_list]
-        # tensor: (Batch, Length, ...)
-        tensor = pad_list(tensor_list, pad_value)
-        output[key] = tensor
+        if isinstance(array_list[0], np.ndarray):
+            # Assume the first axis is length:
+            # tensor_list: Batch x (Length, ...)
+            tensor_list = [torch.from_numpy(a) for a in array_list]
+            # tensor: (Batch, Length, ...)
+            tensor = pad_list(tensor_list, pad_value)
+            output[key] = tensor
+        elif isinstance(array_list[0], list):
+            # For case like multi-speaker ASR, whose label is
+            # (Batch x Num_Spk x Length x ...)
+            assert isinstance(array_list[0][0], np.ndarray)
+            # tensor_list: Batch x [(Length1, ...), (Length2, ...), ...]
+            tensor_list = []
+            for a in array_list:
+                # inner_tensor_list: [(Length1, ...), (Length2, ...), ...]
+                inner_tensor_list = [torch.from_numpy(x) for x in a]
+                # inner_tensor: (List_Len, Length, ...)
+                inner_tensor = pad_list(inner_tensor_list, pad_value)
+                # tensor_list: Batch x (Length, List_Len, ...)
+                tensor_list.append(inner_tensor.transpose(0, 1))
+
+            assert all(tensor_list[0].shape[1] == t.shape[1] for t in tensor_list)
+            # tensor: (Batch, Length, List_Len, ...)
+            tensor = pad_list(tensor_list, pad_value)
+            # tensor: (Batch, List_len, Length, ...)
+            tensor = tensor.transpose(1, 2)
+            output[key] = tensor
+        else:
+            raise NotImplementedError(f"Unsupported type {type(array_list[0])}")
 
         # lens: (Batch,)
         if key not in not_sequence:
-            lens = torch.tensor([d[key].shape[0] for d in data], dtype=torch.long)
-            output[key + "_lengths"] = lens
+            if isinstance(data[0][key], np.ndarray):
+                lens = torch.tensor([d[key].shape[0] for d in data], dtype=torch.long)
+                output[key + "_lengths"] = lens
+            elif isinstance(data[0][key], list):
+                assert isinstance(data[0][key][0], np.ndarray)
+                lens = []
+                for d in data:
+                    inner_lens = [x.shape[0] for x in d[key]]
+                    lens.append(inner_lens)
+                lens = torch.tensor(lens, dtype=torch.long)
+                output[key + "_lengths"] = lens
+            else:
+                raise NotImplementedError(f"Unsupported type {type(data[0][key])}")
 
     output = (uttids, output)
     assert check_return_type(output)

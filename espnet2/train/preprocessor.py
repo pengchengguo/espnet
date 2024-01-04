@@ -499,6 +499,106 @@ class CommonPreprocessor(AbsPreprocessor):
         return data
 
 
+class TgtSpkPreprocessor(CommonPreprocessor):
+    def __init__(
+        self,
+        train: bool,
+        use_lang_prompt: bool = False,
+        use_nlp_prompt: bool = False,
+        token_type: str = None,
+        token_list: Union[Path, str, Iterable[str]] = None,
+        bpemodel: Union[Path, str, Iterable[str]] = None,
+        text_cleaner: Collection[str] = None,
+        g2p_type: str = None,
+        unk_symbol: str = "<unk>",
+        space_symbol: str = "<space>",
+        non_linguistic_symbols: Union[Path, str, Iterable[str]] = None,
+        delimiter: str = None,
+        rir_scp: str = None,
+        rir_apply_prob: float = 1.0,
+        noise_scp: str = None,
+        noise_apply_prob: float = 1.0,
+        noise_db_range: str = "3_10",
+        short_noise_thres: float = 0.5,
+        aux_task_names: Collection[str] = None,
+        speech_volume_normalize: float = None,
+        speech_name: str = "speech",
+        text_name: str = "text",
+        enroll_name: str = None,
+        fs: int = 0,
+        nonsplit_symbol: Iterable[str] = None,
+        data_aug_effects: List = None,
+        data_aug_num: List[int] = [1, 1],
+        data_aug_prob: float = 0.0,
+        # only use for whisper
+        whisper_language: str = None,
+        whisper_task: str = None,
+    ):
+        super().__init__(
+            train=train,
+            token_type=token_type,
+            token_list=token_list,
+            bpemodel=bpemodel,
+            text_cleaner=text_cleaner,
+            g2p_type=g2p_type,
+            unk_symbol=unk_symbol,
+            space_symbol=space_symbol,
+            non_linguistic_symbols=non_linguistic_symbols,
+            delimiter=delimiter,
+            rir_scp=rir_scp,
+            rir_apply_prob=rir_apply_prob,
+            noise_scp=noise_scp,
+            noise_apply_prob=noise_apply_prob,
+            noise_db_range=noise_db_range,
+            short_noise_thres=short_noise_thres,
+            aux_task_names=aux_task_names,
+            speech_volume_normalize=speech_volume_normalize,
+            speech_name=speech_name,
+            text_name=text_name,
+            fs=fs,
+            nonsplit_symbol=nonsplit_symbol,
+            data_aug_effects=data_aug_effects,
+            data_aug_num=data_aug_num,
+            data_aug_prob=data_aug_prob,
+            whisper_language=whisper_language,
+            whisper_task=whisper_task,
+            use_lang_prompt=use_lang_prompt,
+            use_nlp_prompt=use_nlp_prompt,
+        )
+        self.enroll_name = enroll_name
+
+    def _enroll_process(
+        self, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        assert check_argument_types()
+        if self.enroll_name in data:
+            enroll = data[self.enroll_name]
+            if isinstance(enroll, np.ndarray):
+                # use speaker embedding as enrollment
+                # random choose one embedding during the training
+                random_idx = np.random.choice(enroll.shape[0])
+                enroll = enroll[random_idx]
+            elif isinstance(enroll, str):
+                # use audio as enrollment
+                raise NotImplementedError
+
+            data[self.enroll_name] = enroll
+
+        assert check_return_type(data)
+        return data
+
+    def __call__(
+        self, uid: str, data: Dict[str, Union[str, np.ndarray]]
+    ) -> Dict[str, np.ndarray]:
+        assert check_argument_types()
+
+        data = self._speech_process(data)
+        data = self._text_process(data)
+        data = self._enroll_process(data)
+
+        return data
+
+
 class SLUPreprocessor(CommonPreprocessor):
     def __init__(
         self,

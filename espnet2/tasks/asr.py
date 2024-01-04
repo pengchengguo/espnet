@@ -22,7 +22,10 @@ from espnet2.asr.decoder.transformer_decoder import (
     LightweightConvolutionTransformerDecoder,
     TransformerDecoder,
 )
-from espnet2.asr.decoder.whisper_decoder import OpenAIWhisperDecoder
+from espnet2.asr.decoder.whisper_decoder import (
+    OpenAIWhisperDecoder,
+    TgtSpkWhisperDecoder,
+)
 from espnet2.asr.encoder.abs_encoder import AbsEncoder
 from espnet2.asr.encoder.avhubert_encoder import FairseqAVHubertEncoder
 from espnet2.asr.encoder.branchformer_encoder import BranchformerEncoder
@@ -47,7 +50,10 @@ from espnet2.asr.encoder.transformer_encoder_multispkr import (
 )
 from espnet2.asr.encoder.vgg_rnn_encoder import VGGRNNEncoder
 from espnet2.asr.encoder.wav2vec2_encoder import FairSeqWav2Vec2Encoder
-from espnet2.asr.encoder.whisper_encoder import OpenAIWhisperEncoder
+from espnet2.asr.encoder.whisper_encoder import (
+    OpenAIWhisperEncoder,
+    TgtSpkWhisperEncoder,
+)
 from espnet2.asr.espnet_model import ESPnetASRModel
 from espnet2.asr.frontend.abs_frontend import AbsFrontend
 from espnet2.asr.frontend.default import DefaultFrontend
@@ -81,6 +87,7 @@ from espnet2.train.preprocessor import (
     AbsPreprocessor,
     CommonPreprocessor,
     CommonPreprocessor_multi,
+    TgtSpkPreprocessor,
 )
 from espnet2.train.trainer import Trainer
 from espnet2.utils.get_default_kwargs import get_default_kwargs
@@ -155,6 +162,7 @@ encoder_choices = ClassChoices(
         longformer=LongformerEncoder,
         branchformer=BranchformerEncoder,
         whisper=OpenAIWhisperEncoder,
+        tgtspk_whisper=TgtSpkWhisperEncoder,
         e_branchformer=EBranchformerEncoder,
         avhubert=FairseqAVHubertEncoder,
     ),
@@ -183,6 +191,7 @@ decoder_choices = ClassChoices(
         transducer=TransducerDecoder,
         mlm=MLMDecoder,
         whisper=OpenAIWhisperDecoder,
+        tgtspk_whisper=TgtSpkWhisperDecoder,
         hugging_face_transformers=HuggingFaceTransformersDecoder,
         s4=S4Decoder,
     ),
@@ -195,6 +204,7 @@ preprocessor_choices = ClassChoices(
     classes=dict(
         default=CommonPreprocessor,
         multi=CommonPreprocessor_multi,
+        tgtspk=TgtSpkPreprocessor,
     ),
     type_check=AbsPreprocessor,
     default="default",
