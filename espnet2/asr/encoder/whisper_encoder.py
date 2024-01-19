@@ -3,6 +3,7 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
+from torch.nn.parameter import Parameter
 from typeguard import check_argument_types
 
 from espnet2.asr.encoder.abs_encoder import AbsEncoder
@@ -201,7 +202,6 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
         do_pad_trim: bool = False,
         enroll_size: int = 512,
         adapter_method: str = "cat",
-        adapter_position: str = "cnn",
         adapter_normalize: bool = True,
     ):
         super().__init__(
@@ -214,14 +214,34 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
             do_pad_trim,
         )
 
-        assert adapter_position == "cnn" or adapter_position.startswith("enc")
-        self.adapter_position = adapter_position
-        self.adapter = SpkAdapter(
-            enroll_size,
-            self.encoders.conv2.out_channels,
-            adapter_method,
-            adapter_normalize,
-        )
+        hidden_size = self.encoders.conv2.out_channels
+        self.adapter_method = adapter_method
+        if adapter_method in ["cat", "additive", "film"]:
+            self.adapter = SpkAdapter(
+                enroll_size,
+                hidden_size,
+                adapter_method,
+                adapter_normalize,
+            )
+        elif adapter_method == "cln":
+            # init conditional layernorm layers, only for the first encoder layer
+            attn_ln = ConditionalLayerNorm(
+                enroll_size,
+                hidden_size,
+                init_weight=self.encoders.blocks[0].attn_ln.weight.data,
+                init_bias=self.encoders.blocks[0].attn_ln.bias.data,
+            )
+            mlp_ln = ConditionalLayerNorm(
+                enroll_size,
+                hidden_size,
+                init_weight=self.encoders.blocks[0].mlp_ln.weight.data,
+                init_bias=self.encoders.blocks[0].mlp_ln.bias.data,
+            )
+            # change the original layernorm to conditional layernorm
+            setattr(self.encoders.blocks[0], "attn_ln", attn_ln)
+            setattr(self.encoders.blocks[0], "mlp_ln", mlp_ln)
+        else:
+            raise ValueError(f"Not supported adapter: {adapter_method}")
 
     def whisper_encode(
         self,
@@ -241,23 +261,23 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
             # due to positional encoding, audios >30 sec won't be accepted
             x = x[:, :max_pos, :] + self.encoders.positional_embedding
 
-        enroll = enroll.unsqueeze(1).expand(-1, x.size(1), -1)
-
-        if self.adapter_position == "cnn":
-            # do target speaker adaptation on the CNN features
-            x = self.adapter(x, enroll)
-
         x = self.dropout(x)
 
         for layer, block in enumerate(self.encoders.blocks):
-            x = block(x)
-
-            if (
-                self.adapter_position.startswith("enc")
-                and int(self.adapter_position.split(":")[-1]) == layer
-            ):
-                # do target speaker adaptation on the inter encoder outputs
-                x = self.adapter(x, enroll)
+            if layer == 0:
+                # only do speaker adaptation in the first layer
+                if self.adapter_method in ["cat", "additive", "film"]:
+                    x = self.adapter(x, enroll)
+                    x = block(x)
+                elif self.adapter_method == "cln":
+                    # forward attention layer
+                    x = x + block.attn(block.attn_ln(x, enroll))[0]
+                    # forward mlp layer
+                    x = x + block.mlp(block.mlp_ln(x, enroll))
+                else:
+                    raise ValueError(f"Not supported adapter: {self.adapter_method}")
+            else:
+                x = block(x)
 
             if layer < len(self.encoders.blocks) - 1:
                 x = self.dropout(x)
@@ -338,6 +358,8 @@ class SpkAdapter(torch.nn.Module):
             self.adapter_norm = None
 
     def forward(self, x: torch.Tensor, enroll: torch.Tensor):
+        enroll = enroll.unsqueeze(1).expand(-1, x.size(1), -1)
+
         if self.adapter_method == "cat":
             fused_emb = torch.cat([x, enroll], dim=-1)
             x = x + self.adapter(fused_emb)
@@ -403,3 +425,73 @@ class FiLM(torch.nn.Module):
         x = (1 + gamma) * x + beta
 
         return x
+
+
+class ConditionalLayerNorm(torch.nn.Module):
+    """Conditional layer normalization layer.
+
+    URL: https://openreview.net/pdf?id=de11dbHzAMF
+         https://github.com/HuangZiliAndy/fairseq/tree/multispk
+    """
+
+    def __init__(
+        self,
+        enroll_size: int,
+        normalized_shape: int,
+        eps: float = 1e-5,
+        modulate_bias: bool = False,
+        init_weight: torch.Tensor = None,
+        init_bias: torch.Tensor = None,
+    ):
+        super().__init__()
+
+        self.eps = eps
+        self.normalized_shape = (normalized_shape,)
+        self.init_weight = init_weight
+        self.init_bias = init_bias
+
+        self.weight = Parameter(torch.empty(self.normalized_shape))
+        self.bias = Parameter(torch.empty(self.normalized_shape))
+
+        self.ln_weight_modulation = FiLM(enroll_size, self.normalized_shape[0])
+        if modulate_bias:
+            self.ln_bias_modulation = FiLM(enroll_size, self.normalized_shape[0])
+        else:
+            self.ln_bias_modulation = None
+
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        if self.init_weight is not None:
+            self.weight.data.copy_(self.init_weight)
+        else:
+            torch.nn.init.ones_(self.weight)
+
+        if self.init_bias is not None:
+            self.bias.data.copy_(self.init_bias)
+        else:
+            torch.nn.init.zeros_(self.bias)
+
+    def forward(self, x: torch.Tensor, enroll: torch.Tensor):
+        # mean.shape: (B, T, 1), var.shape: (B, T, 1)
+        mean = torch.mean(x, -1, keepdim=True)
+        var = torch.var(x, -1, unbiased=False, keepdim=True)
+
+        # weight.shape: (B, D)
+        weight = self.ln_weight_modulation(
+            self.weight.expand(enroll.size(0), -1), enroll
+        )
+        # weight.shape: (B, T, D)
+        weight = weight.unsqueeze(1).expand(-1, x.size(1), -1)
+
+        if self.ln_bias_modulation is None:
+            bias = self.bias
+        else:
+            # bias.shape: (B, D)
+            bias = self.ln_bias_modulation(self.bias.expand(enroll.size(0), -1), enroll)
+            # bias.shape: (B, T, D)
+            bias = bias.unsqueeze(1).expand(-1, x.size(1), -1)
+
+        result = (x - mean) / torch.sqrt(var + self.eps) * weight + bias
+
+        return result
