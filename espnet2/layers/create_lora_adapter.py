@@ -7,6 +7,7 @@ References:
     3. https://github.com/huggingface/peft/blob/main/src/peft/tuners/lora.py
 
 """
+
 from typing import List
 
 import torch
@@ -24,6 +25,7 @@ def create_lora_adapter(
     alpha: int = 8,
     dropout_rate: float = 0.0,
     target_modules: List[str] = ["query"],
+    other_trainable_modules: List[str] = None,
     bias_type: str = "none",
 ):
     """Create LoRA adapter for the base model.
@@ -38,6 +40,8 @@ def create_lora_adapter(
         target_modules (List[str]): List of module(s) to apply LoRA adaptation.
             e.g. ["query", "key", "value"] for all layers,
             while ["encoder.encoders.blocks.0.attn.key"] for a specific layer.
+        other_trainable_modules (List[str]): List of other trainable modules apart from
+            LoRA layers. Those modules will also be saved in the checkpoint.
         bias_type (str): Bias training type for LoRA adaptaion, can be
             one of ["none", "all", "lora_only"].
             "none" means not training any bias vectors;
@@ -78,11 +82,15 @@ def create_lora_adapter(
 
     lora.mark_only_lora_as_trainable(model, bias_type)
 
+    if other_trainable_modules is not None:
+        model.other_trainable_modules = other_trainable_modules
+        mark_other_modules_as_trainable(model, other_trainable_modules)
+
 
 def check_target_module_exists(key: str, target_modules: List[str]):
     """Check if the target_modules matchs the given key."""
 
-    return any([key.endswith(target_key) for target_key in target_modules])
+    return any([key.endswith(f".{target_key}") for target_key in target_modules])
 
 
 def get_submodules(model: torch.nn.Module, key: str):
@@ -145,3 +153,40 @@ def replace_module(
 
     # move the new_module to the same device as the old_module
     new_module.to(device)
+
+
+def mark_other_modules_as_trainable(
+    model: torch.nn.Module, other_trainable_modules: List[str]
+):
+    """Mark other trainable modules apart from LoRA layers as trainable."""
+
+    key_list = [key for key, _ in model.named_modules()]
+    for key in key_list:
+        module_found = any(
+            [key.endswith(module_key) for module_key in other_trainable_modules]
+        )
+        if module_found:
+            _, _, target_module = get_submodules(model, key)
+            target_module.requires_grad_(True)
+
+
+def get_lora_state_dict(model: torch.nn.Module):
+    if lora is None:
+        raise RuntimeError(
+            "Requiring loralib. Install loralib following: "
+            "https://github.com/microsoft/LoRA"
+        )
+
+    ori_state_dict = model.state_dict()
+    return_state_dict = {}
+    other_trainable_modules = getattr(model, "other_trainable_modules", None)
+
+    for k in ori_state_dict:
+        if "lora_" in k:
+            return_state_dict[k] = ori_state_dict[k]
+        if other_trainable_modules is not None:
+            for module in other_trainable_modules:
+                if module in k:
+                    return_state_dict[k] = ori_state_dict[k]
+
+    return return_state_dict

@@ -334,7 +334,7 @@ class SpkAdapter(torch.nn.Module):
     ):
         super().__init__()
 
-        assert adapter_method in ["cat", "additive", "film", "cln"]
+        assert adapter_method in ["cat", "additive", "film"]
         self.adapter_method = adapter_method
         if adapter_method == "cat":
             self.adapter = torch.nn.Sequential(
