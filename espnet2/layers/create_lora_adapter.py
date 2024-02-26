@@ -8,10 +8,10 @@ References:
 
 """
 
-from typing import List
-
 import torch
+import logging
 from typeguard import check_argument_types
+from typing import List
 
 try:
     import loralib as lora
@@ -85,6 +85,10 @@ def create_lora_adapter(
     if other_trainable_modules is not None:
         model.other_trainable_modules = other_trainable_modules
         mark_other_modules_as_trainable(model, other_trainable_modules)
+
+    for k, p in model.named_parameters():
+        if p.requires_grad == True:
+            logging.info(f"Trainable parameter: {k}")
 
 
 def check_target_module_exists(key: str, target_modules: List[str]):

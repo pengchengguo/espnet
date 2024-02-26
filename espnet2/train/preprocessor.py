@@ -423,7 +423,7 @@ class CommonPreprocessor(AbsPreprocessor):
 
     def _text_process(
         self, data: Dict[str, Union[str, np.ndarray]]
-    ) -> Dict[str, np.ndarray]:
+    ) -> Dict[str, Union[str, np.ndarray]]:
         if self.text_name in data and self.tokenizer is not None:
             text = data[self.text_name]
             if isinstance(text, np.ndarray):
@@ -503,6 +503,7 @@ class TgtSpkPreprocessor(CommonPreprocessor):
     def __init__(
         self,
         train: bool,
+        train_spk2enroll: str = None,
         use_lang_prompt: bool = False,
         use_nlp_prompt: bool = False,
         token_type: str = None,
@@ -524,7 +525,9 @@ class TgtSpkPreprocessor(CommonPreprocessor):
         speech_volume_normalize: float = None,
         speech_name: str = "speech",
         text_name: str = "text",
-        enroll_name: str = None,
+        enroll_name: str = "enroll",
+        enroll_embedding: bool = False,
+        enroll_segment: int = 0,
         fs: int = 0,
         nonsplit_symbol: Iterable[str] = None,
         data_aug_effects: List = None,
@@ -565,7 +568,56 @@ class TgtSpkPreprocessor(CommonPreprocessor):
             use_lang_prompt=use_lang_prompt,
             use_nlp_prompt=use_nlp_prompt,
         )
+
         self.enroll_name = enroll_name
+        # if true, use speaker embedding as enrollment instead of audio
+        self.enroll_embedding = enroll_embedding
+        # if specified, chomp the enrollment audio to a specific length
+        self.enroll_segment = enroll_segment
+
+        if train:
+            if train_spk2enroll is None:
+                logging.info("Use fixed enrollment for each sample.")
+                self.train_spk2enroll = None
+            else:
+                logging.info("Dynamically select enrollment for each sample.")
+                with open(train_spk2enroll, "r", encoding="utf-8") as f:
+                    # {spk_id: [[utt_id1, path1], [utt_id2, path2]]}
+                    self.train_spk2enroll = json.load(f)
+        else:
+            logging.info("Use fixed enrollment for each sample.")
+            self.train_spk2enroll = None
+
+    def __repr__(self):
+        name = self.__class__.__module__ + "." + self.__class__.__name__
+        msg = f"{name} (train={self.train}"
+        if self.train_spk2enroll:
+            msg += f", len(train_spk2enroll)={len(self.train_spk2enroll)}"
+        for key in ("enroll_name", "enroll_embedding", "enroll_segment"):
+            if getattr(self, key):
+                msg += f", {key}={getattr(self, key)}"
+        return msg + ")"
+
+    def _read_audio_segment(self, path, segment_len):
+        with soundfile.SoundFile(path) as f:
+            if segment_len <= 0 or f.frames == segment_len:
+                audio = f.read(dtype=np.float32, always_2d=True)
+            elif f.frames < segment_len:
+                offset = np.random.randint(0, segment_len - f.frames)
+                # audio: (Time, Nmic)
+                audio = f.read(dtype=np.float32, always_2d=True)
+                # Repeat audio
+                audio = np.pad(
+                    audio,
+                    [(offset, segment_len - f.frames - offset), (0, 0)],
+                    mode="wrap",
+                )
+            else:
+                offset = np.random.randint(0, f.frames - segment_len)
+                f.seek(offset)
+                # audio: (Time, Nmic)
+                audio = f.read(segment_len, dtype=np.float32, always_2d=True)
+        return audio[:, 0]
 
     def _enroll_process(
         self, data: Dict[str, Union[str, np.ndarray]]
@@ -574,13 +626,39 @@ class TgtSpkPreprocessor(CommonPreprocessor):
         if self.enroll_name in data:
             enroll = data[self.enroll_name]
             if isinstance(enroll, np.ndarray):
+                # for the compatibility of legacy implementation
                 # use speaker embedding as enrollment
-                # random choose one embedding during the training
+                # randomly choose one embedding during the training
                 random_idx = np.random.choice(enroll.shape[0])
                 enroll = enroll[random_idx]
             elif isinstance(enroll, str):
-                # use audio as enrollment
-                raise NotImplementedError
+                # for the latest implementation
+                # use speaker embedding or audio as enrollment
+                if self.train and self.train_spk2enroll:
+                    # specical format in `enroll.scp`: MIX_ID *UTT_ID SPK_ID
+                    # dynamically select enrollment for each sample
+                    assert enroll.startswith("*"), enroll
+                    utt_id, spk_id = enroll[1:].strip().split(maxsplit=1)
+                    enroll_id, enroll_path = random.choice(
+                        self.train_spk2enroll[spk_id]
+                    )
+                    while utt_id == enroll_id:
+                        enroll_id, enroll_path = random.choice(
+                            self.train_spk2enroll[spk_id]
+                        )
+                else:
+                    # normal format in `enroll.scp`: MIX_ID PATH/TO/ENROLLMENT
+                    # use fixed enrollment for each sample
+                    assert not enroll.startswith("*"), enroll
+                    enroll_path = enroll
+                if self.enroll_embedding:
+                    # use speaker embedding as enrollment
+                    enroll = np.load(enroll_path)
+                else:
+                    # use audio as enrollment
+                    enroll = self._read_audio_segment(enroll_path, self.enroll_segment)
+            else:
+                raise NotImplementedError(f"Not supported enroll type: {type(enroll)}")
 
             data[self.enroll_name] = enroll
 
@@ -831,9 +909,11 @@ class MutliTokenizerCommonPreprocessor(CommonPreprocessor):
             token_list=token_list[0],
             bpemodel=bpemodel[0],
             text_cleaner=text_cleaner,
-            g2p_type=g2p_type[0]
-            if type(g2p_type) is not str and g2p_type is not None
-            else g2p_type,
+            g2p_type=(
+                g2p_type[0]
+                if type(g2p_type) is not str and g2p_type is not None
+                else g2p_type
+            ),
             unk_symbol=unk_symbol,
             space_symbol=space_symbol,
             non_linguistic_symbols=non_linguistic_symbols,
@@ -882,9 +962,9 @@ class MutliTokenizerCommonPreprocessor(CommonPreprocessor):
                             if i < len(tokenizer_encode_conf)
                             else None
                         ),
-                        whisper_language=whisper_language[i]
-                        if "whisper" in token_type[i]
-                        else None,
+                        whisper_language=(
+                            whisper_language[i] if "whisper" in token_type[i] else None
+                        ),
                         whisper_task=whisper_task,
                     )
                 )
