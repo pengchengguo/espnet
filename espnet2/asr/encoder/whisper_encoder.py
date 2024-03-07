@@ -6,6 +6,9 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from typeguard import check_argument_types
 
+from espnet2.asr.adapter.film_adapter import FiLM
+from espnet2.asr.adapter.cln_adapter import ConditionalLayerNorm
+from espnet2.asr.adapter.qformer_adapter import QFormerAdapter
 from espnet2.asr.encoder.abs_encoder import AbsEncoder
 from espnet2.asr.specaug.specaug import SpecAug
 
@@ -374,124 +377,3 @@ class SpkAdapter(torch.nn.Module):
             x = self.adapter_norm(x)
 
         return x
-
-
-class FiLM(torch.nn.Module):
-    """Feature-wise linear modulation (FiLM) layer.
-
-    URL: https://arxiv.org/pdf/1709.07871.pdf,
-         https://github.com/HuangZiliAndy/fairseq/tree/multispk
-    """
-
-    def __init__(
-        self,
-        enroll_size: torch.Tensor,
-        hidden_size: torch.Tensor,
-        num_layers: int = 1,
-    ) -> None:
-        super().__init__()
-
-        self.enroll_size = enroll_size
-        self.hidden_size = hidden_size
-        self.num_layers = num_layers
-
-        gamma_lst, beta_lst = [], []
-        for i in range(num_layers):
-            if i == 0:
-                gamma_lst.append(torch.nn.Linear(enroll_size, hidden_size))
-                beta_lst.append(torch.nn.Linear(enroll_size, hidden_size))
-            else:
-                gamma_lst.append(torch.nn.Linear(hidden_size, hidden_size))
-                beta_lst.append(torch.nn.Linear(hidden_size, hidden_size))
-        self.gamma_lst = torch.nn.ModuleList(gamma_lst)
-        self.beta_lst = torch.nn.ModuleList(beta_lst)
-
-        self.init_weights()
-
-    def init_weights(self):
-        for layer in self.gamma_lst + self.beta_lst:
-            torch.nn.init.zeros_(layer.weight)
-            torch.nn.init.zeros_(layer.bias)
-
-    def forward(self, x: torch.Tensor, enroll: torch.Tensor):
-        for i in range(self.num_layers):
-            if i == 0:
-                gamma = self.gamma_lst[i](enroll)
-                beta = self.beta_lst[i](enroll)
-            else:
-                gamma = self.gamma_lst[i](gamma)
-                beta = self.beta_lst[i](beta)
-
-        x = (1 + gamma) * x + beta
-
-        return x
-
-
-class ConditionalLayerNorm(torch.nn.Module):
-    """Conditional layer normalization layer.
-
-    URL: https://openreview.net/pdf?id=de11dbHzAMF
-         https://github.com/HuangZiliAndy/fairseq/tree/multispk
-    """
-
-    def __init__(
-        self,
-        enroll_size: int,
-        normalized_shape: int,
-        eps: float = 1e-5,
-        modulate_bias: bool = False,
-        init_weight: torch.Tensor = None,
-        init_bias: torch.Tensor = None,
-    ):
-        super().__init__()
-
-        self.eps = eps
-        self.normalized_shape = (normalized_shape,)
-        self.init_weight = init_weight
-        self.init_bias = init_bias
-
-        self.weight = Parameter(torch.empty(self.normalized_shape))
-        self.bias = Parameter(torch.empty(self.normalized_shape))
-
-        self.ln_weight_modulation = FiLM(enroll_size, self.normalized_shape[0])
-        if modulate_bias:
-            self.ln_bias_modulation = FiLM(enroll_size, self.normalized_shape[0])
-        else:
-            self.ln_bias_modulation = None
-
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        if self.init_weight is not None:
-            self.weight.data.copy_(self.init_weight)
-        else:
-            torch.nn.init.ones_(self.weight)
-
-        if self.init_bias is not None:
-            self.bias.data.copy_(self.init_bias)
-        else:
-            torch.nn.init.zeros_(self.bias)
-
-    def forward(self, x: torch.Tensor, enroll: torch.Tensor):
-        # mean.shape: (B, T, 1), var.shape: (B, T, 1)
-        mean = torch.mean(x, -1, keepdim=True)
-        var = torch.var(x, -1, unbiased=False, keepdim=True)
-
-        # weight.shape: (B, D)
-        weight = self.ln_weight_modulation(
-            self.weight.expand(enroll.size(0), -1), enroll
-        )
-        # weight.shape: (B, T, D)
-        weight = weight.unsqueeze(1).expand(-1, x.size(1), -1)
-
-        if self.ln_bias_modulation is None:
-            bias = self.bias
-        else:
-            # bias.shape: (B, D)
-            bias = self.ln_bias_modulation(self.bias.expand(enroll.size(0), -1), enroll)
-            # bias.shape: (B, T, D)
-            bias = bias.unsqueeze(1).expand(-1, x.size(1), -1)
-
-        result = (x - mean) / torch.sqrt(var + self.eps) * weight + bias
-
-        return result
