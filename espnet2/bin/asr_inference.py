@@ -275,17 +275,17 @@ class Speech2Text:
             hugging_face_model.to(device=device).eval()
 
             if "num_beams" not in hugging_face_decoder_conf:
-                hugging_face_decoder_conf[
-                    "num_beams"
-                ] = hugging_face_model.config.num_beams
+                hugging_face_decoder_conf["num_beams"] = (
+                    hugging_face_model.config.num_beams
+                )
 
             if (
                 hugging_face_model.config.pad_token_id is None
                 and "pad_token_id" not in hugging_face_decoder_conf
             ):
-                hugging_face_decoder_conf[
-                    "pad_token_id"
-                ] = hugging_face_model.config.eos_token_id
+                hugging_face_decoder_conf["pad_token_id"] = (
+                    hugging_face_model.config.eos_token_id
+                )
 
             beam_search = None
             beam_search_transducer = None
@@ -457,9 +457,7 @@ class Speech2Text:
         self.multi_asr = multi_asr
 
     @torch.no_grad()
-    def __call__(
-        self, speech: Union[torch.Tensor, np.ndarray], **kwargs
-    ) -> Union[
+    def __call__(self, speech: Union[torch.Tensor, np.ndarray], **kwargs) -> Union[
         ListOfHypothesis,
         Tuple[
             ListOfHypothesis,
@@ -489,8 +487,13 @@ class Speech2Text:
 
         # additional input
         for key in kwargs:
-            # kwargs[key]: (Nsamples,) -> (1, Nsamples)
-            batch.update({key: kwargs[key].unsqueeze(0)})
+            # data: (Nsamples,) -> (1, Nsamples)
+            other = kwargs[key].unsqueeze(0).to(getattr(torch, self.dtype))
+            # lengths: (1,)
+            other_lengths = other.new_full(
+                [1], dtype=torch.long, fill_value=other.size(1)
+            )
+            batch.update({f"{key}": other, f"{key}_lengths": other_lengths})
             logging.info(f"additional input: {key}")
 
         # a. To device
@@ -870,9 +873,9 @@ def inference(
                 ibest_writer = writer[f"1best_recog"]
                 if encoder_interctc_res is not None:
                     for idx, text in encoder_interctc_res.items():
-                        ibest_writer[f"encoder_interctc_layer{idx}.txt"][
-                            key
-                        ] = " ".join(text)
+                        ibest_writer[f"encoder_interctc_layer{idx}.txt"][key] = (
+                            " ".join(text)
+                        )
 
 
 def get_parser():
