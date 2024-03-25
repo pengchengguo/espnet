@@ -225,11 +225,13 @@ class ESPnetASRModel(AbsESPnetModel):
         if self.tgtspk_asr:
             # get speaker enrollment from the input
             enroll = kwargs.get("enroll", None)
+            enroll_lengths = kwargs.get("enroll_lengths", None)
             assert (
-                enroll is not None
+                enroll is not None and enroll_lengths is not None
             ), f"Missing speaker enrollment for target speaker ASR"
         else:
             enroll = None
+            enroll_lengths = None
 
         assert text_lengths.dim() == 1, text_lengths.shape
         # Check that batch_size is unified
@@ -240,7 +242,11 @@ class ESPnetASRModel(AbsESPnetModel):
             == text_lengths.shape[0]
         ), (speech.shape, speech_lengths.shape, text.shape, text_lengths.shape)
         if enroll is not None:
-            assert speech.shape[0] == enroll.shape[0], (speech.shape, enroll.shape)
+            assert speech.shape[0] == enroll.shape[0] == enroll_lengths.shape[0], (
+                speech.shape,
+                enroll.shape,
+                enroll_lengths.shape,
+            )
 
         batch_size = speech.shape[0]
 
@@ -251,7 +257,7 @@ class ESPnetASRModel(AbsESPnetModel):
 
         # 1. Encoder
         encoder_out, encoder_out_lens = self.encode(
-            speech, speech_lengths, enroll=enroll
+            speech, speech_lengths, enroll=enroll, enroll_lengths=enroll_lengths
         )
         intermediate_outs = None
         if isinstance(encoder_out, tuple):
@@ -347,7 +353,7 @@ class ESPnetASRModel(AbsESPnetModel):
             # 2b. Attention decoder branch
             if self.ctc_weight != 1.0:
                 loss_att, acc_att, cer_att, wer_att = self._calc_att_loss(
-                    encoder_out, encoder_out_lens, text, text_lengths, enroll=enroll
+                    encoder_out, encoder_out_lens, text, text_lengths
                 )
 
             # 3. CTC-Att loss definition
@@ -387,13 +393,17 @@ class ESPnetASRModel(AbsESPnetModel):
         speech: torch.Tensor,
         speech_lengths: torch.Tensor,
         enroll: torch.Tensor = None,
+        enroll_lengths: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Frontend + Encoder. Note that this method is used by asr_inference.py
 
         Args:
             speech: (Batch, Length, ...)
             speech_lengths: (Batch, )
-            enroll: (Batch, Dim) or None
+            enroll: (Batch, Dim) for embedding enrollment
+                    or (Batch, Length) for speech enrollment
+                    or None for normal ASR
+            enroll_lengths: (Batch, ) or None
         """
         with autocast(False):
             # 1. Extract feats
@@ -421,9 +431,9 @@ class ESPnetASRModel(AbsESPnetModel):
                 feats, feats_lengths, ctc=self.ctc
             )
         else:
-            if self.tgtspk_asr:
+            if self.tgtspk_asr and enroll is not None:
                 encoder_out, encoder_out_lens, _ = self.encoder(
-                    feats, feats_lengths, enroll=enroll
+                    feats, feats_lengths, enroll=enroll, enroll_lens=enroll_lengths
                 )
             else:
                 encoder_out, encoder_out_lens, _ = self.encoder(feats, feats_lengths)
@@ -566,7 +576,6 @@ class ESPnetASRModel(AbsESPnetModel):
         encoder_out_lens: torch.Tensor,
         ys_pad: torch.Tensor,
         ys_pad_lens: torch.Tensor,
-        enroll: torch.Tensor = None,
     ):
         if hasattr(self, "lang_token_id") and self.lang_token_id is not None:
             ys_pad = torch.cat(

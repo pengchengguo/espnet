@@ -63,9 +63,14 @@ def create_lora_adapter(
     key_list = [key for key, _ in model.named_modules()]
 
     for key in key_list:
-        if not check_target_module_exists(key, target_modules):
+        if other_trainable_modules and any(
+            module_key in key for module_key in other_trainable_modules
+        ):
+            # set additional modules later
             continue
 
+        if not check_target_module_exists(key, target_modules):
+            continue
         is_traget_module_exists = True
 
         parent_module, target_name, target_module = get_submodules(model, key)
@@ -82,7 +87,7 @@ def create_lora_adapter(
 
     lora.mark_only_lora_as_trainable(model, bias_type)
 
-    if other_trainable_modules is not None:
+    if other_trainable_modules:
         model.other_trainable_modules = other_trainable_modules
         mark_other_modules_as_trainable(model, other_trainable_modules)
 

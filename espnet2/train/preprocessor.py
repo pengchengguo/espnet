@@ -599,24 +599,22 @@ class TgtSpkPreprocessor(CommonPreprocessor):
         return msg + ")"
 
     def _read_audio_segment(self, path, segment_len):
-        with soundfile.SoundFile(path) as f:
-            if segment_len <= 0 or f.frames == segment_len:
-                audio = f.read(dtype=np.float32, always_2d=True)
-            elif f.frames < segment_len:
-                offset = np.random.randint(0, segment_len - f.frames)
-                # audio: (Time, Nmic)
-                audio = f.read(dtype=np.float32, always_2d=True)
-                # Repeat audio
-                audio = np.pad(
-                    audio,
-                    [(offset, segment_len - f.frames - offset), (0, 0)],
-                    mode="wrap",
-                )
-            else:
-                offset = np.random.randint(0, f.frames - segment_len)
-                f.seek(offset)
-                # audio: (Time, Nmic)
-                audio = f.read(segment_len, dtype=np.float32, always_2d=True)
+        # audio: (Time, Nmic)
+        audio, sr = soundfile.read(path, dtype=np.float32, always_2d=True)
+        if segment_len <= 0 or len(audio) == segment_len:
+            audio = audio
+        elif len(audio) < segment_len:
+            offset = np.random.randint(0, segment_len - len(audio))
+            # Pad audio
+            audio = np.pad(
+                audio,
+                [(offset, segment_len - len(audio) - offset), (0, 0)],
+                mode="wrap",
+            )
+        else:
+            offset = np.random.randint(0, len(audio) - segment_len)
+            audio = audio[offset : offset + segment_len, :]
+
         return audio[:, 0]
 
     def _enroll_process(
@@ -642,7 +640,7 @@ class TgtSpkPreprocessor(CommonPreprocessor):
                     enroll_id, enroll_path = random.choice(
                         self.train_spk2enroll[spk_id]
                     )
-                    while utt_id == enroll_id:
+                    while utt_id == enroll_id or not Path(enroll_path).exists():
                         enroll_id, enroll_path = random.choice(
                             self.train_spk2enroll[spk_id]
                         )
