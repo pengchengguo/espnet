@@ -110,6 +110,7 @@ class Speech2Text:
         hugging_face_decoder_conf: Dict[str, Any] = {},
         time_sync: bool = False,
         multi_asr: bool = False,
+        tgtspk_infer: bool = False,
         lid_prompt: bool = False,
         lang_prompt_token: Optional[str] = None,
         nlp_prompt_token: Optional[str] = None,
@@ -455,6 +456,7 @@ class Speech2Text:
         self.nbest = nbest
         self.enh_s2t_task = enh_s2t_task
         self.multi_asr = multi_asr
+        self.tgtspk_infer = tgtspk_infer
 
     @torch.no_grad()
     def __call__(self, speech: Union[torch.Tensor, np.ndarray], **kwargs) -> Union[
@@ -500,9 +502,15 @@ class Speech2Text:
         batch = to_device(batch, device=self.device)
 
         # b. Forward Encoder
-        enc, enc_olens = self.asr_model.encode(**batch)
+        if self.tgtspk_infer:
+            enc, enc_olens, speech_prompt, _ = self.asr_model.encode(**batch)
+        else:
+            enc, enc_olens = self.asr_model.encode(**batch)
+            speech_prompt = None
+
         if self.multi_asr:
             enc = enc.unbind(dim=1)  # (batch, num_inf, ...) -> num_inf x [batch, ...]
+
         if self.enh_s2t_task or self.multi_asr:
             # Enh+ASR joint task or Multispkr ASR task
             # NOTE (Wangyou): the return type in this case is List[default_return_type]
@@ -532,7 +540,7 @@ class Speech2Text:
             assert len(enc) == 1, len(enc)
 
             # c. Passed the encoder result and the beam search
-            results = self._decode_single_sample(enc[0])
+            results = self._decode_single_sample(enc[0], speech_prompt=speech_prompt)
 
             # Encoder intermediate CTC predictions
             if intermediate_outs is not None:
@@ -560,7 +568,9 @@ class Speech2Text:
 
         return res
 
-    def _decode_single_sample(self, enc: torch.Tensor):
+    def _decode_single_sample(
+        self, enc: torch.Tensor, speech_prompt: torch.Tensor = None
+    ):
         if self.beam_search_transducer:
             logging.info("encoder output length: " + str(enc.shape[0]))
             nbest_hyps = self.beam_search_transducer(enc)
@@ -626,7 +636,10 @@ class Speech2Text:
                         if hasattr(module, "setup_step"):
                             module.setup_step()
             nbest_hyps = self.beam_search(
-                x=enc, maxlenratio=self.maxlenratio, minlenratio=self.minlenratio
+                x=enc,
+                maxlenratio=self.maxlenratio,
+                minlenratio=self.minlenratio,
+                speech_prompt=speech_prompt,
             )
 
         nbest_hyps = nbest_hyps[: self.nbest]
@@ -728,6 +741,7 @@ def inference(
     hugging_face_decoder_conf: Dict[str, Any],
     time_sync: bool,
     multi_asr: bool,
+    tgtspk_infer: bool,
     lang_prompt_token: Optional[str],
     nlp_prompt_token: Optional[str],
     prompt_token_file: Optional[str],
@@ -777,6 +791,7 @@ def inference(
         streaming=streaming,
         enh_s2t_task=enh_s2t_task,
         multi_asr=multi_asr,
+        tgtspk_infer=tgtspk_infer,
         quantize_asr_model=quantize_asr_model,
         quantize_lm=quantize_lm,
         quantize_modules=quantize_modules,
@@ -979,6 +994,12 @@ def get_parser():
         default=False,
         help="Whether we are using a monolithic multi-speaker ASR model "
         "(This flag should be False if a speech separation model is used before ASR)",
+    )
+    group.add_argument(
+        "--tgtspk_infer",
+        type=str2bool,
+        default=False,
+        help="Whether to do target speaker inference with target speaker enrollment.",
     )
     group = parser.add_argument_group("Quantization related")
     group.add_argument(

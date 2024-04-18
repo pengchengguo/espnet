@@ -1,7 +1,8 @@
 import copy
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 from typeguard import check_argument_types
@@ -206,6 +207,7 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
         enroll_size: int = 512,
         adapter_method: str = "cat",
         adapter_normalize: bool = True,
+        modulate_bias: bool = False,
     ):
         super().__init__(
             input_size,
@@ -228,21 +230,25 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
             )
         elif adapter_method == "cln":
             # init conditional layernorm layers, only for the first encoder layer
-            attn_ln = ConditionalLayerNorm(
+            attn_cln = ConditionalLayerNorm(
                 enroll_size,
                 hidden_size,
+                modulate_bias=modulate_bias,
                 init_weight=self.encoders.blocks[0].attn_ln.weight.data,
                 init_bias=self.encoders.blocks[0].attn_ln.bias.data,
             )
-            mlp_ln = ConditionalLayerNorm(
+            mlp_cln = ConditionalLayerNorm(
                 enroll_size,
                 hidden_size,
+                modulate_bias=modulate_bias,
                 init_weight=self.encoders.blocks[0].mlp_ln.weight.data,
                 init_bias=self.encoders.blocks[0].mlp_ln.bias.data,
             )
+            self.encoders.blocks[0].attn_cln = attn_cln
+            self.encoders.blocks[0].mlp_cln = mlp_cln
             # change the original layernorm to conditional layernorm
-            setattr(self.encoders.blocks[0], "attn_ln", attn_ln)
-            setattr(self.encoders.blocks[0], "mlp_ln", mlp_ln)
+            # setattr(self.encoders.blocks[0], "attn_ln", attn_ln)
+            # setattr(self.encoders.blocks[0], "mlp_ln", mlp_ln)
         else:
             raise ValueError(f"Not supported adapter: {adapter_method}")
 
@@ -274,9 +280,9 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
                     x = block(x)
                 elif self.adapter_method == "cln":
                     # forward attention layer
-                    x = x + block.attn(block.attn_ln(x, enroll))[0]
+                    x = x + block.attn(block.attn_cln(x, enroll))[0]
                     # forward mlp layer
-                    x = x + block.mlp(block.mlp_ln(x, enroll))
+                    x = x + block.mlp(block.mlp_cln(x, enroll))
                 else:
                     raise ValueError(f"Not supported adapter: {self.adapter_method}")
             else:
@@ -308,6 +314,7 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
         xs_pad: torch.Tensor,
         ilens: torch.Tensor,
         enroll: torch.Tensor,
+        enroll_lens: torch.Tensor,
         prev_states: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         if self.do_pad_trim:
@@ -325,8 +332,172 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
         return xs_pad, olens, None
 
 
-class SpkAdapter(torch.nn.Module):
-    """Target speaker adaptation for Whisper encoder."""
+class MultiAdapterTgtSpkWhisperEncoder(OpenAIWhisperEncoder):
+    """Multi adapter based target speaker Whisper Encoder."""
+
+    def __init__(
+        self,
+        input_size: int = 1,
+        dropout_rate: float = 0,
+        whisper_model: str = "small",
+        download_dir: str = None,
+        use_specaug: bool = False,
+        specaug_conf: dict | None = None,
+        do_pad_trim: bool = False,
+        enroll_size: int = 512,
+        adapter_method: str = "cat",
+        adapter_layers: Union[str, List[int]] = [0],
+        adapter_normalize: bool = True,
+    ):
+        super().__init__(
+            input_size,
+            dropout_rate,
+            whisper_model,
+            download_dir,
+            use_specaug,
+            specaug_conf,
+            do_pad_trim,
+        )
+
+        hidden_size = self.encoders.conv2.out_channels
+        self.adapter_method = adapter_method
+        self.adapter_layers = self.get_layers(adapter_layers)
+        self.adapters = {}
+        for layer in self.adapter_layers:
+            if adapter_method in ["cat", "additive", "film"]:
+                self.encoders.blocks[layer].adapter = SpkAdapter(
+                    enroll_size,
+                    hidden_size,
+                    adapter_method,
+                    adapter_normalize,
+                )
+            elif adapter_method == "cln":
+                # init conditional layernorm layers
+                attn_cln = ConditionalLayerNorm(
+                    enroll_size,
+                    hidden_size,
+                    init_weight=self.encoders.blocks[layer].attn_ln.weight.data,
+                    init_bias=self.encoders.blocks[layer].attn_ln.bias.data,
+                )
+                mlp_cln = ConditionalLayerNorm(
+                    enroll_size,
+                    hidden_size,
+                    init_weight=self.encoders.blocks[layer].mlp_ln.weight.data,
+                    init_bias=self.encoders.blocks[layer].mlp_ln.bias.data,
+                )
+                self.encoders.blocks[layer].attn_cln = attn_cln
+                self.encoders.blocks[layer].mlp_cln = mlp_cln
+                # change the original layernorm to conditional layernorm
+                # setattr(self.encoders.blocks[layer], "attn_ln", attn_ln)
+                # setattr(self.encoders.blocks[layer], "mlp_ln", mlp_ln)
+            else:
+                raise ValueError(f"Not supported adapter: {adapter_method}")
+
+    def get_layers(self, adapter_layers):
+        if isinstance(adapter_layers, str):
+            assert adapter_layers in ["all", "low_half", "high_half"]
+            if adapter_layers == "all":
+                return list(range(len(self.encoders.blocks)))
+            elif adapter_layers == "low_half":
+                return list(range(len(self.encoders.blocks) // 2))
+            else:
+                return list(
+                    range(len(self.encoders.blocks) // 2, len(self.encoders.blocks))
+                )
+        elif isinstance(adapter_layers, list):
+            assert all([isinstance(layer, int) for layer in adapter_layers])
+            return adapter_layers
+        else:
+            raise ValueError(
+                f"adapter_layers should be 'all', 'low_half', 'high_half' "
+                "or list of integers."
+            )
+
+    def whisper_encode(
+        self,
+        input: torch.Tensor,
+        ilens: torch.Tensor,
+        enroll: torch.Tensor,
+    ) -> torch.Tensor:
+        x = F.gelu(self.encoders.conv1(input))
+        x = F.gelu(self.encoders.conv2(x))
+        x = x.permute(0, 2, 1)
+
+        n_frames = x.size(1)
+        max_pos = self.encoders.positional_embedding.size(0)
+        if n_frames <= max_pos:
+            x = (x + self.encoders.positional_embedding[: x.size(1), :]).to(x.dtype)
+        else:
+            # due to positional encoding, audios >30 sec won't be accepted
+            x = x[:, :max_pos, :] + self.encoders.positional_embedding
+
+        x = self.dropout(x)
+
+        for layer, block in enumerate(self.encoders.blocks):
+            if layer in self.adapter_layers:
+                if self.adapter_method in ["cat", "additive", "film"]:
+                    # foward adapter layer
+                    x = block.adapter(x, enroll)
+                    # forward attention layer
+                    x = x + block.attn(block.attn_ln(x))[0]
+                    # forward mlp layer
+                    x = x + block.mlp(block.mlp_ln(x))
+                elif self.adapter_method == "cln":
+                    # forward attention layer
+                    x = x + block.attn(block.attn_cln(x, enroll))[0]
+                    # forward mlp layer
+                    x = x + block.mlp(block.mlp_cln(x, enroll))
+                else:
+                    raise ValueError(f"Not supported adapter: {self.adapter_method}")
+            else:
+                x = block(x)
+
+            if layer < len(self.encoders.blocks) - 1:
+                x = self.dropout(x)
+
+        x = self.encoders.ln_post(x)
+
+        if ilens is not None:
+            olens = (
+                1
+                + (
+                    ilens
+                    - self.encoders.conv2.kernel_size[0]
+                    + 2 * self.encoders.conv2.padding[0]
+                )
+                // self.encoders.conv2.stride[0]
+            )
+            olens = torch.clamp(olens, max=max_pos)
+        else:
+            olens = None
+
+        return x, olens
+
+    def forward(
+        self,
+        xs_pad: torch.Tensor,
+        ilens: torch.Tensor,
+        enroll: torch.Tensor,
+        enroll_lens: torch.Tensor,
+        prev_states: torch.Tensor = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        if self.do_pad_trim:
+            xs_pad = self.pad_or_trim(xs_pad, self.pad_samples)
+
+        feats, feats_lens = self.log_mel_spectrogram(xs_pad, ilens)
+
+        if self.specaug is not None and self.encoders.training:
+            feats = torch.transpose(feats, 1, 2)
+            feats, feats_lens = self.specaug(feats, feats_lens)
+            feats = torch.transpose(feats, 1, 2)
+
+        xs_pad, olens = self.whisper_encode(feats, feats_lens, enroll)
+
+        return xs_pad, olens, None
+
+
+class SpkAdapter(nn.Module):
+    """Target speaker adapter."""
 
     def __init__(
         self,
@@ -340,15 +511,15 @@ class SpkAdapter(torch.nn.Module):
         assert adapter_method in ["cat", "additive", "film"]
         self.adapter_method = adapter_method
         if adapter_method == "cat":
-            self.adapter = torch.nn.Sequential(
-                torch.nn.Linear(hidden_size + enroll_size, hidden_size),
+            self.adapter = nn.Sequential(
+                nn.Linear(hidden_size + enroll_size, hidden_size),
             )
         elif adapter_method == "additive":
             linear_size = 2 * enroll_size
-            self.adapter = torch.nn.Sequential(
-                torch.nn.Linear(enroll_size, linear_size),
-                torch.nn.GELU(),
-                torch.nn.Linear(linear_size, hidden_size),
+            self.adapter = nn.Sequential(
+                nn.Linear(enroll_size, linear_size),
+                nn.GELU(),
+                nn.Linear(linear_size, hidden_size),
             )
         elif adapter_method == "film":
             self.adapter = FiLM(enroll_size, hidden_size)
@@ -356,7 +527,7 @@ class SpkAdapter(torch.nn.Module):
             raise NotImplementedError(f"Not supported adapter: {adapter_method}")
 
         if adapter_normalize:
-            self.adapter_norm = torch.nn.LayerNorm(hidden_size)
+            self.adapter_norm = nn.LayerNorm(hidden_size)
         else:
             self.adapter_norm = None
 
@@ -375,5 +546,325 @@ class SpkAdapter(torch.nn.Module):
 
         if self.adapter_norm is not None:
             x = self.adapter_norm(x)
+
+        return x
+
+
+class QFormerTgtSpkWhisperEncoder(OpenAIWhisperEncoder):
+    """QFormer based target speaker Whisper Encoder (V1)."""
+
+    def __init__(
+        self,
+        input_size: int = 1,
+        dropout_rate: float = 0,
+        whisper_model: str = "small",
+        download_dir: str = None,
+        use_specaug: bool = False,
+        specaug_conf: dict | None = None,
+        do_pad_trim: bool = False,
+        num_query_tokens: int = 1,
+        num_hidden_layers: int = 2,
+        combiner_method: str = "film",
+        adapter_normalize: bool = True,
+    ):
+        super().__init__(
+            input_size,
+            dropout_rate,
+            whisper_model,
+            download_dir,
+            use_specaug,
+            specaug_conf,
+            do_pad_trim,
+        )
+
+        self.kernel = self.encoders.conv2.kernel_size[0]
+        self.padding = self.encoders.conv2.padding[0]
+        self.stride = self.encoders.conv2.stride[0]
+        self.out_channels = self.encoders.conv2.out_channels
+
+        self.adapter = QFormerSpkAdapter(
+            self.out_channels,
+            num_query_tokens=num_query_tokens,
+            num_hidden_layers=num_hidden_layers,
+            combiner_method=combiner_method,
+            adapter_normalize=adapter_normalize,
+        )
+
+    def whisper_encode(
+        self,
+        input: torch.Tensor,
+        ilens: torch.Tensor,
+        enroll: torch.Tensor,
+        enroll_lens: torch.Tensor,
+    ) -> torch.Tensor:
+        # forward for the input
+        x = F.gelu(self.encoders.conv1(input))
+        x = F.gelu(self.encoders.conv2(x))
+        x = x.permute(0, 2, 1)
+
+        positional_embedding = self.encoders.positional_embedding
+        if x.size(1) <= positional_embedding.size(0):
+            x = (x + positional_embedding[: x.size(1), :]).to(x.dtype)
+        else:
+            # due to positional encoding, audios >30 sec won't be accepted
+            x = x[:, : positional_embedding.size(0), :] + positional_embedding
+
+        x = self.dropout(x)
+
+        if ilens is not None:
+            x_lens = 1 + (ilens - self.kernel + 2 * self.padding) // self.stride
+            x_lens = torch.clamp(x_lens, max=positional_embedding.size(0))
+        else:
+            x_lens = None
+
+        # forward for the enrollment
+        enroll = F.gelu(self.encoders.conv1(enroll))
+        enroll = F.gelu(self.encoders.conv2(enroll))
+        enroll = enroll.permute(0, 2, 1)
+        assert enroll.size(1) <= positional_embedding.size(0)
+
+        # enroll = (enroll + self.positional_embedding[: enroll.size(1), :]).to(
+        #     enroll.dtype
+        # )
+        # enroll = self.dropout(enroll)
+
+        if enroll_lens is not None:
+            enroll_lens = (
+                1 + (enroll_lens - self.kernel + 2 * self.padding) // self.stride
+            )
+            enroll_lens = torch.clamp(enroll_lens, max=positional_embedding.size(0))
+        else:
+            enroll_lens = None
+
+        for idx, block in enumerate(self.encoders.blocks):
+            if idx == 0:
+                # only do speaker adaptation in the first layer
+                x = self.adapter(x, x_lens, enroll, enroll_lens, block)
+            else:
+                x = block(x)
+
+            if idx < len(self.encoders.blocks) - 1:
+                x = self.dropout(x)
+
+        x = self.encoders.ln_post(x)
+
+        return x, x_lens
+
+    def forward(
+        self,
+        xs_pad: torch.Tensor,
+        ilens: torch.Tensor,
+        enroll: torch.Tensor,
+        enroll_lens: torch.Tensor,
+        prev_states: torch.Tensor = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        if self.do_pad_trim:
+            xs_pad = self.pad_or_trim(xs_pad, self.pad_samples)
+
+        feats, feats_lens = self.log_mel_spectrogram(xs_pad, ilens)
+        # extract feats for enrollment
+        enroll_feats, enroll_feats_lens = self.log_mel_spectrogram(enroll, enroll_lens)
+
+        if self.specaug is not None and self.encoders.training:
+            feats = torch.transpose(feats, 1, 2)
+            feats, feats_lens = self.specaug(feats, feats_lens)
+            feats = torch.transpose(feats, 1, 2)
+
+        xs_pad, olens = self.whisper_encode(
+            feats, feats_lens, enroll_feats, enroll_feats_lens
+        )
+
+        return xs_pad, olens, None
+
+
+class QFormerTgtSpkWhisperEncoder_V2(OpenAIWhisperEncoder):
+    """QFormer based target speaker Whisper Encoder (V2)."""
+
+    def __init__(
+        self,
+        input_size: int = 1,
+        dropout_rate: float = 0,
+        whisper_model: str = "small",
+        download_dir: str = None,
+        use_specaug: bool = False,
+        specaug_conf: dict | None = None,
+        do_pad_trim: bool = False,
+        num_query_tokens: int = 1,
+        num_hidden_layers: int = 2,
+    ):
+        super().__init__(
+            input_size,
+            dropout_rate,
+            whisper_model,
+            download_dir,
+            use_specaug,
+            specaug_conf,
+            do_pad_trim,
+        )
+
+        self.kernel = self.encoders.conv2.kernel_size[0]
+        self.padding = self.encoders.conv2.padding[0]
+        self.stride = self.encoders.conv2.stride[0]
+        self.encoder_size = self.encoders.conv2.out_channels
+
+        # the learned queries of QFormer are used as speaker prompt
+        self.qformer = QFormerAdapter(
+            self.encoder_size,
+            num_query_tokens=num_query_tokens,
+            num_hidden_layers=num_hidden_layers,
+        )
+
+        if self.qformer.output_size() != self.encoder_size:
+            self.prompt_proj = nn.Linear(self.qformer.output_size(), self.encoder_size)
+        else:
+            self.prompt_proj = None
+
+    def whisper_encode(
+        self,
+        input: torch.Tensor,
+        ilens: torch.Tensor,
+        enroll: torch.Tensor,
+        enroll_lens: torch.Tensor,
+    ) -> torch.Tensor:
+
+        # 1. extract the input feats
+        x = F.gelu(self.encoders.conv1(input))
+        x = F.gelu(self.encoders.conv2(x))
+        x = x.permute(0, 2, 1)
+
+        positional_embedding = self.encoders.positional_embedding
+        if x.size(1) <= positional_embedding.size(0):
+            x = (x + positional_embedding[: x.size(1), :]).to(x.dtype)
+        else:
+            # due to positional encoding, audios >30 sec won't be accepted
+            x = x[:, : positional_embedding.size(0), :] + positional_embedding
+
+        if ilens is not None:
+            x_lens = 1 + (ilens - self.kernel + 2 * self.padding) // self.stride
+            x_lens = torch.clamp(x_lens, max=positional_embedding.size(0))
+        else:
+            x_lens = None
+
+        # 2. extract the enrollment feats
+        enroll = F.gelu(self.encoders.conv1(enroll))
+        enroll = F.gelu(self.encoders.conv2(enroll))
+        enroll = enroll.permute(0, 2, 1)
+        assert enroll.size(1) <= positional_embedding.size(0)
+
+        # enroll = (enroll + self.positional_embedding[: enroll.size(1), :]).to(
+        #     enroll.dtype
+        # )
+        # enroll = self.dropout(enroll)
+
+        if enroll_lens is not None:
+            enroll_lens = (
+                1 + (enroll_lens - self.kernel + 2 * self.padding) // self.stride
+            )
+            enroll_lens = torch.clamp(enroll_lens, max=positional_embedding.size(0))
+        else:
+            enroll_lens = None
+
+        # 3. extract the speaker prompt
+        spk_prompt, enroll_embedding = self.qformer(x, x_lens, enroll, enroll_lens)
+        if self.prompt_proj is not None:
+            spk_prompt = self.prompt_proj(spk_prompt)
+            enroll_embedding = self.prompt_proj(enroll_embedding)
+
+        # 4. concat speaker prompt and input feats
+        x = torch.cat([spk_prompt, x], dim=1)
+        # TODO (GPC): should have a layrnorm or not
+        x = self.dropout(x)
+        x_lens = x_lens + spk_prompt.size(1)
+
+        # 5. forward the encoder
+        for layer, block in enumerate(self.encoders.blocks):
+            x = block(x)
+            if layer < len(self.encoders.blocks) - 1:
+                x = self.dropout(x)
+
+        x = self.encoders.ln_post(x)
+
+        return x, x_lens, spk_prompt, enroll_embedding
+
+    def forward(
+        self,
+        xs_pad: torch.Tensor,
+        ilens: torch.Tensor,
+        enroll: torch.Tensor,
+        enroll_lens: torch.Tensor,
+        prev_states: torch.Tensor = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
+        if self.do_pad_trim:
+            xs_pad = self.pad_or_trim(xs_pad, self.pad_samples)
+
+        # extract fbank feats
+        feats, feats_lens = self.log_mel_spectrogram(xs_pad, ilens)
+        enroll_feats, enroll_feats_lens = self.log_mel_spectrogram(enroll, enroll_lens)
+
+        if self.specaug is not None and self.encoders.training:
+            feats = torch.transpose(feats, 1, 2)
+            feats, feats_lens = self.specaug(feats, feats_lens)
+            feats = torch.transpose(feats, 1, 2)
+
+        xs_pad, olens, spk_prompt, enroll_embedding = self.whisper_encode(
+            feats, feats_lens, enroll_feats, enroll_feats_lens
+        )
+
+        return xs_pad, olens, spk_prompt, enroll_embedding
+
+
+class QFormerSpkAdapter(nn.Module):
+    """QFormer based target speaker adapter."""
+
+    def __init__(
+        self,
+        hidden_size: int,
+        num_query_tokens: int = 1,
+        num_hidden_layers: int = 2,
+        combiner_method: str = "film",
+        adapter_normalize: bool = True,
+    ):
+        super().__init__()
+
+        # here, the learned queries of QFormer are used as speaker prompt
+        self.qformer = QFormerAdapter(
+            hidden_size,
+            num_query_tokens=num_query_tokens,
+            num_hidden_layers=num_hidden_layers,
+        )
+        outpu_size = self.qformer.output_size()
+
+        if combiner_method == "film":
+            self.combiner = FiLM(enroll_size=outpu_size, hidden_size=hidden_size)
+        else:
+            raise NotImplementedError(f"Not supported combiner: {combiner_method}")
+
+        if adapter_normalize:
+            self.norm = nn.LayerNorm(hidden_size)
+        else:
+            self.norm = None
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        x_lens: torch.Tensor,
+        enroll: torch.Tensor,
+        enroll_lens: torch.Tensor,
+        block: nn.Module,
+    ):
+        spk_prompt, enroll_embedding = self.qformer(x, x_lens, enroll, enroll_lens)
+
+        # do mean pooling on the length dimension
+        spk_prompt = torch.mean(spk_prompt, dim=1)
+
+        spk_prompt = spk_prompt.unsqueeze(1).expand(-1, x.size(1), -1).contiguous()
+
+        x = self.combiner(x, spk_prompt)
+
+        if self.norm is not None:
+            x = self.norm(x)
+
+        # forward the first block of the encoder
+        x = block(x)
 
         return x

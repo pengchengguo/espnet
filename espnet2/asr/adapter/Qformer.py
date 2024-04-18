@@ -13,6 +13,7 @@ Modified from https://github.com/salesforce/LAVIS/blob/main/lavis/models/blip2_m
 import math
 from typing import Tuple
 
+import numpy as np
 import torch
 from torch import Tensor, device, nn
 import torch.utils.checkpoint
@@ -38,30 +39,30 @@ from transformers.models.bert.configuration_bert import BertConfig
 logger = logging.get_logger(__name__)
 
 
+def sinusoids(length, channels, max_timescale=10000):
+    """Returns sinusoids for positional embedding"""
+    assert channels % 2 == 0
+    log_timescale_increment = np.log(max_timescale) / (channels // 2 - 1)
+    inv_timescales = torch.exp(-log_timescale_increment * torch.arange(channels // 2))
+    scaled_time = torch.arange(length)[:, np.newaxis] * inv_timescales[np.newaxis, :]
+    return torch.cat([torch.sin(scaled_time), torch.cos(scaled_time)], dim=1)
+
+
 class BertEmbeddings(nn.Module):
-    """Construct the embeddings from word and position embeddings."""
+    """Construct the embeddings and position embeddings."""
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(
-            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
-        )
-        self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size
+        self.word_embeddings = nn.Linear(config.encoder_width, config.hidden_size)
+        self.register_buffer(
+            "position_embeddings",
+            sinusoids(config.max_position_embeddings, config.hidden_size),
         )
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1))
-        )
-        self.position_embedding_type = getattr(
-            config, "position_embedding_type", "absolute"
-        )
 
         self.config = config
 
@@ -72,22 +73,9 @@ class BertEmbeddings(nn.Module):
         query_embeds=None,
         past_key_values_length=0,
     ):
-        # if input_ids is not None:
-        #     seq_length = input_ids.size()[1]
-        # else:
-        #     seq_length = 0
-
-        # if position_ids is None:
-        #     position_ids = self.position_ids[
-        #         :, past_key_values_length : seq_length + past_key_values_length
-        #     ].clone()
-
         if input_ids is not None:
-            embeddings = input_ids
-            # embeddings = self.word_embeddings(input_ids)
-            # if self.position_embedding_type == "absolute":
-            #     position_embeddings = self.position_embeddings(position_ids)
-            #     embeddings = embeddings + position_embeddings
+            embeddings = self.word_embeddings(input_ids)
+            embeddings = embeddings + self.position_embeddings[: embeddings.size(1), :]
 
             if query_embeds is not None:
                 embeddings = torch.cat((query_embeds, embeddings), dim=1)
@@ -417,7 +405,7 @@ class BertLayer(nn.Module):
         present_key_value = self_attention_outputs[-1]
 
         if query_length > 0:
-            query_attention_output = attention_output[:, :query_length, :]
+            query_attention_output = attention_output[:, :query_length, :].contiguous()
 
             if self.has_cross_attention:
                 assert (
@@ -447,7 +435,7 @@ class BertLayer(nn.Module):
                     self.feed_forward_chunk,
                     self.chunk_size_feed_forward,
                     self.seq_len_dim,
-                    attention_output[:, query_length:, :],
+                    attention_output[:, query_length:, :].contiguous(),
                 )
                 layer_output = torch.cat([layer_output, layer_output_text], dim=1)
         else:

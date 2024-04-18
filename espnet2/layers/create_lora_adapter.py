@@ -95,6 +95,8 @@ def create_lora_adapter(
         if p.requires_grad == True:
             logging.info(f"Trainable parameter: {k}")
 
+    # model.eval()
+
 
 def check_target_module_exists(key: str, target_modules: List[str]):
     """Check if the target_modules matchs the given key."""

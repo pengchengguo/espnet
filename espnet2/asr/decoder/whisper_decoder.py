@@ -224,3 +224,293 @@ class OpenAIWhisperDecoder(AbsDecoder, BatchScorerInterface):
         logp, states = self.forward_one_step(ys, torch.empty(0), xs, cache=None)
 
         return logp, None
+
+
+class QFormerTgtSpkWhisperDecoder_V2(OpenAIWhisperDecoder):
+    """QFormer based target speaker Whisper Decoder (V2)"""
+
+    def __init__(
+        self,
+        vocab_size: int,
+        encoder_output_size: int,
+        dropout_rate: float = 0.0,
+        whisper_model: str = "small",
+        download_dir: str = None,
+        load_origin_token_embedding=False,
+        startofprev_token: int = 50361,
+    ):
+        super().__init__(
+            vocab_size,
+            encoder_output_size,
+            dropout_rate,
+            whisper_model,
+            download_dir,
+            load_origin_token_embedding,
+        )
+        self.startofprev_token = startofprev_token
+
+    def forward(
+        self,
+        hs_pad: torch.Tensor,
+        hlens: torch.Tensor,
+        ys_in_pad: torch.Tensor,
+        ys_in_lens: torch.Tensor,
+        spk_prompt: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Forward decoder."""
+
+        tgt, memory = ys_in_pad, hs_pad
+        # (batch, 1)
+        startofprev = (
+            tgt.new([self.startofprev_token]).unsqueeze(1).expand(tgt.size(0), -1)
+        ).contiguous()
+
+        tgt = self.decoders.token_embedding(tgt)
+        startofprev = self.decoders.token_embedding(startofprev)
+        # concat startofprev tokens, speaker prompts, and target tokens
+        tgt = torch.cat([startofprev, spk_prompt, tgt], dim=1)
+
+        tgt = tgt + self.decoders.positional_embedding[: tgt.size(1)]
+        tgt = self.dropout(tgt)
+        x = tgt.to(memory.dtype)
+
+        for layer, block in enumerate(self.decoders.blocks):
+            x = block(x, memory, mask=self.decoders.mask)
+            if layer < len(self.decoders.blocks) - 1:
+                x = self.dropout(x)
+
+        x = self.decoders.ln(x)
+        x = (
+            x @ torch.transpose(self.decoders.token_embedding.weight.to(x.dtype), 0, 1)
+        ).float()
+
+        # only compute loss for the part of target tokens
+        x = x[:, 1 + spk_prompt.size(1) :].contiguous()
+
+        return x, ys_in_lens
+
+    def forward_one_step(
+        self,
+        tgt: torch.Tensor,
+        tgt_mask: torch.Tensor,
+        memory: torch.Tensor,
+        spk_prompt: torch.Tensor,
+        cache: List[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+        """Forward one step.
+
+        Args:
+            tgt: input token ids, int64 (batch, maxlen_out)
+            tgt_mask: input token mask,  (batch, maxlen_out)
+                      dtype=torch.uint8 in PyTorch 1.2-
+                      dtype=torch.bool in PyTorch 1.2+ (include 1.2)
+            memory: encoded memory, float32  (batch, maxlen_in, feat)
+            cache: cached output list of (batch, max_time_out-1, size)
+            spe
+        Returns:
+            y, cache: NN output value and cache per `self.decoders`.
+            y.shape` is (batch, maxlen_out, token)
+        NOTE (Shih-Lun):
+            cache implementation is ignored for now
+            for simplicity & correctness
+        """
+        startofprev = (
+            tgt.new([self.startofprev_token]).unsqueeze(1).expand(tgt.size(0), -1)
+        )
+
+        tgt = self.decoders.token_embedding(tgt)
+        startofprev = self.decoders.token_embedding(startofprev)
+        # concat startofprev tokens, speaker prompts, and target tokens
+        tgt = torch.cat([startofprev, spk_prompt, tgt], dim=1)
+
+        x = tgt + self.decoders.positional_embedding[: tgt.size(1)]
+        x = self.dropout(x)
+        x = x.to(memory.dtype)
+
+        for layer, block in enumerate(self.decoders.blocks):
+            x = block(x, memory, mask=self.decoders.mask)
+            if layer < len(self.decoders.blocks) - 1:
+                x = self.dropout(x)
+
+        x = self.decoders.ln(x)
+        y = x[:, -1]
+        y = (
+            y @ torch.transpose(self.decoders.token_embedding.weight.to(x.dtype), 0, 1)
+        ).float()
+        y = torch.log_softmax(y, dim=-1)
+
+        return y, None
+
+    def batch_score(
+        self,
+        ys: torch.Tensor,
+        states: List[Any],
+        xs: torch.Tensor,
+        speech_prompt: torch.Tensor,
+    ) -> Tuple[torch.Tensor, List[Any]]:
+        """Score new token batch.
+
+        Args:
+            ys (torch.Tensor): torch.int64 prefix tokens (n_batch, ylen).
+            states (List[Any]): Scorer states for prefix tokens.
+            xs (torch.Tensor):
+                The encoder feature that generates ys (n_batch, xlen, n_feat).
+
+        Returns:
+            tuple[torch.Tensor, List[Any]]: Tuple of
+                batchfied scores for next token with shape of `(n_batch, n_vocab)`
+                and next state list for ys.
+
+        """
+        # batch decoding, dummy mask is passed
+        logp, states = self.forward_one_step(
+            ys, torch.empty(0), xs, speech_prompt, cache=None
+        )
+
+        return logp, None
+
+
+class QFormerTgtSpkWhisperDecoder_V2_1(OpenAIWhisperDecoder):
+    """QFormer based target speaker Whisper Decoder (V2.1)
+    Changes: only add positional embedding to the tgt tokens
+    """
+
+    def __init__(
+        self,
+        vocab_size: int,
+        encoder_output_size: int,
+        dropout_rate: float = 0.0,
+        whisper_model: str = "small",
+        download_dir: str = None,
+        load_origin_token_embedding=False,
+        startofprev_token: int = 50361,
+    ):
+        super().__init__(
+            vocab_size,
+            encoder_output_size,
+            dropout_rate,
+            whisper_model,
+            download_dir,
+            load_origin_token_embedding,
+        )
+        self.startofprev_token = startofprev_token
+
+    def forward(
+        self,
+        hs_pad: torch.Tensor,
+        hlens: torch.Tensor,
+        ys_in_pad: torch.Tensor,
+        ys_in_lens: torch.Tensor,
+        spk_prompt: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Forward decoder."""
+
+        tgt, memory = ys_in_pad, hs_pad
+        # (batch, 1)
+        startofprev = (
+            tgt.new([self.startofprev_token]).unsqueeze(1).expand(tgt.size(0), -1)
+        )
+
+        tgt = self.decoders.token_embedding(tgt)
+        tgt = tgt + self.decoders.positional_embedding[: tgt.size(1)]
+        startofprev = self.decoders.token_embedding(startofprev)
+        # concat startofprev tokens, speaker prompts, and target tokens
+        tgt = torch.cat([startofprev, spk_prompt, tgt], dim=1)
+
+        tgt = self.dropout(tgt)
+        x = tgt.to(memory.dtype)
+
+        for layer, block in enumerate(self.decoders.blocks):
+            x = block(x, memory, mask=self.decoders.mask)
+            if layer < len(self.decoders.blocks) - 1:
+                x = self.dropout(x)
+
+        x = self.decoders.ln(x)
+        x = (
+            x @ torch.transpose(self.decoders.token_embedding.weight.to(x.dtype), 0, 1)
+        ).float()
+
+        # only compute loss for the part of target tokens
+        x = x[:, 1 + spk_prompt.size(1) :].contiguous()
+
+        return x, ys_in_lens
+
+    def forward_one_step(
+        self,
+        tgt: torch.Tensor,
+        tgt_mask: torch.Tensor,
+        memory: torch.Tensor,
+        spk_prompt: torch.Tensor,
+        cache: List[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, List[torch.Tensor]]:
+        """Forward one step.
+
+        Args:
+            tgt: input token ids, int64 (batch, maxlen_out)
+            tgt_mask: input token mask,  (batch, maxlen_out)
+                      dtype=torch.uint8 in PyTorch 1.2-
+                      dtype=torch.bool in PyTorch 1.2+ (include 1.2)
+            memory: encoded memory, float32  (batch, maxlen_in, feat)
+            cache: cached output list of (batch, max_time_out-1, size)
+            spe
+        Returns:
+            y, cache: NN output value and cache per `self.decoders`.
+            y.shape` is (batch, maxlen_out, token)
+        NOTE (Shih-Lun):
+            cache implementation is ignored for now
+            for simplicity & correctness
+        """
+        startofprev = (
+            tgt.new([self.startofprev_token]).unsqueeze(1).expand(tgt.size(0), -1)
+        )
+
+        tgt = self.decoders.token_embedding(tgt)
+        tgt = tgt + self.decoders.positional_embedding[: tgt.size(1)]
+        startofprev = self.decoders.token_embedding(startofprev)
+        # concat startofprev tokens, speaker prompts, and target tokens
+        x = torch.cat([startofprev, spk_prompt, tgt], dim=1)
+
+        x = self.dropout(x)
+        x = x.to(memory.dtype)
+
+        for layer, block in enumerate(self.decoders.blocks):
+            x = block(x, memory, mask=self.decoders.mask)
+            if layer < len(self.decoders.blocks) - 1:
+                x = self.dropout(x)
+
+        x = self.decoders.ln(x)
+        y = x[:, -1]
+        y = (
+            y @ torch.transpose(self.decoders.token_embedding.weight.to(x.dtype), 0, 1)
+        ).float()
+        y = torch.log_softmax(y, dim=-1)
+
+        return y, None
+
+    def batch_score(
+        self,
+        ys: torch.Tensor,
+        states: List[Any],
+        xs: torch.Tensor,
+        speech_prompt: torch.Tensor,
+    ) -> Tuple[torch.Tensor, List[Any]]:
+        """Score new token batch.
+
+        Args:
+            ys (torch.Tensor): torch.int64 prefix tokens (n_batch, ylen).
+            states (List[Any]): Scorer states for prefix tokens.
+            xs (torch.Tensor):
+                The encoder feature that generates ys (n_batch, xlen, n_feat).
+
+        Returns:
+            tuple[torch.Tensor, List[Any]]: Tuple of
+                batchfied scores for next token with shape of `(n_batch, n_vocab)`
+                and next state list for ys.
+
+        """
+        # batch decoding, dummy mask is passed
+        logp, states = self.forward_one_step(
+            ys, torch.empty(0), xs, speech_prompt, cache=None
+        )
+
+        return logp, None

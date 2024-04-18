@@ -398,7 +398,7 @@ bpeprefix="${bpedir}"/bpe
 bpemodel="${bpeprefix}".model
 bpetoken_list="${bpedir}"/tokens.txt
 chartoken_list="${token_listdir}"/char/tokens.txt
-hugging_face_token_list="${token_listdir}/hugging_face_"${hugging_face_model_name_or_path/\//-}/tokens.txt
+hugging_face_token_list="${token_listdir}/hugging_face_"${hugging_face_model_name_or_path##*/}/tokens.txt
 # NOTE: keep for future development.
 # shellcheck disable=SC2034
 wordtoken_list="${token_listdir}"/word/tokens.txt
@@ -451,7 +451,7 @@ if [ -z "${asr_tag}" ]; then
         asr_tag+="${nbpe}"
     fi
     if [ "${token_type}" = hugging_face ]; then
-        asr_tag+="_"${hugging_face_model_name_or_path/\//-}
+        asr_tag+="_"${hugging_face_model_name_or_path##*/}
     fi
     # Add overwritten arg's info
     if [ -n "${asr_args}" ]; then
@@ -492,7 +492,7 @@ if [ -z "${asr_stats_dir}" ]; then
         asr_stats_dir+="${nbpe}"
     fi
     if [ "${token_type}" = hugging_face ]; then
-        asr_stats_dir+="_"${hugging_face_model_name_or_path/\//-}
+        asr_stats_dir+="_"${hugging_face_model_name_or_path##*/}
     fi
     if [ -n "${speed_perturb_factors}" ]; then
         asr_stats_dir+="_sp"
@@ -617,7 +617,6 @@ if [ ${stage} -le 3 ] && [ ${stop_stage} -ge 3 ] && ! [[ " ${skip_stages} " =~ [
     else
         _dsets="${train_set} ${valid_set} ${test_sets}"
     fi
-    _dsets="${train_set}"
     if [ "${feats_type}" = raw ]; then
         log "Stage 3: Format wav.scp: data/ -> ${data_feats}"
 
@@ -807,8 +806,7 @@ if [ ${stage} -le 4 ] && [ ${stop_stage} -ge 4 ] && ! [[ " ${skip_stages} " =~ [
     log "Stage 4: Remove long/short data: ${data_feats}/org -> ${data_feats}"
 
     # NOTE(kamo): Not applying to test_sets to keep original data
-    # for dset in "${train_set}" "${valid_set}"; do
-    for dset in "${train_set}"; do
+    for dset in "${train_set}" "${valid_set}"; do
 
         # Copy data dir
         utils/copy_data_dir.sh --validate_opts --non-print "${data_feats}/org/${dset}" "${data_feats}/${dset}"
@@ -1268,11 +1266,11 @@ if [ ${stage} -le 10 ] && [ ${stop_stage} -ge 10 ] && ! [[ " ${skip_stages} " =~
         _opts+="--use_lang_prompt ${use_lang_prompt} "
         _opts+="--use_nlp_prompt ${use_nlp_prompt} "
     fi
-    if ${tgtspk_asr}; then
-        _opts+="--allow_variable_data_keys True "
-        _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/${enroll_prefix}.scp,enroll,${enroll_type} "
-        _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/${enroll_prefix}.scp,enroll,${enroll_type} "
-    fi
+    # if ${tgtspk_asr}; then
+    #     _opts+="--allow_variable_data_keys True "
+    #     _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/${enroll_prefix}.scp,enroll,${enroll_type} "
+    #     _opts+="--valid_data_path_and_name_and_type ${_asr_valid_dir}/${enroll_prefix}.scp,enroll,${enroll_type} "
+    # fi
 
     # shellcheck disable=SC2046,SC2086
     ${train_cmd} JOB=1:"${_nj}" "${_logdir}"/stats.JOB.log \
@@ -1387,7 +1385,6 @@ if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ] && ! [[ " ${skip_stages} " =~
         _opts+="--multiple_iterator true "
 
     else
-        # NOTE: only support num_splits_asr == 1 now
         _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/${_scp},speech,${_type} "
         _opts+="--train_shape_file ${asr_stats_dir}/train/speech_shape "
 
@@ -1405,6 +1402,7 @@ if [ ${stage} -le 11 ] && [ ${stop_stage} -ge 11 ] && ! [[ " ${skip_stages} " =~
             _opts+="--train_shape_file ${asr_stats_dir}/train/${ref_text_names[$i]}_shape.${token_type} "
         done
         if ${tgtspk_asr}; then
+            # _opts+="--tgtspk_asr True "
             _opts+="--allow_variable_data_keys True "
             _opts+="--train_data_path_and_name_and_type ${_asr_train_dir}/${enroll_prefix}.scp,enroll,${enroll_type} "
             # _opts+="--train_shape_file ${asr_stats_dir}/train/${enroll_prefix}_shape "
@@ -1598,6 +1596,7 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
         if ${tgtspk_asr}; then
             _other_inputs+="--allow_variable_data_keys True "
             _other_inputs+="--data_path_and_name_and_type ${_data}/${enroll_prefix}.scp,enroll,${enroll_type} "
+            # inference_args+="--tgtspk_infer True"
         fi
 
         # 2. Submit decoding jobs
@@ -1605,7 +1604,7 @@ if [ ${stage} -le 12 ] && [ ${stop_stage} -ge 12 ] && ! [[ " ${skip_stages} " =~
         rm -f "${_logdir}/*.log"
         # shellcheck disable=SC2046,SC2086
         ${_cmd} --gpu "${_ngpu}" JOB=1:"${_nj}" "${_logdir}"/asr_inference.JOB.log \
-            ${python} -m espnet2.bin.${asr_task}_inference${inference_bin_tag} \
+            CUDA_VISIBLE_DEVICES=JOB ${python} -m espnet2.bin.${asr_task}_inference${inference_bin_tag} \
                 --batch_size ${batch_size} \
                 --ngpu "${_ngpu}" \
                 --data_path_and_name_and_type "${_data}/${_scp},speech,${_type}" \
