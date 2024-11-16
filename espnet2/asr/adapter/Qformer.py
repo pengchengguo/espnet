@@ -226,6 +226,7 @@ class BertSelfAttention(nn.Module):
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        self.attention_probs = attention_probs.clone()
 
         if is_cross_attention and self.save_attention:
             self.save_attention_map(attention_probs)
@@ -317,6 +318,7 @@ class BertAttention(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
+        self.attention_probs = self.self.attention_probs.clone()
 
         outputs = (attention_output,) + self_outputs[
             1:
@@ -388,6 +390,7 @@ class BertLayer(nn.Module):
         output_attentions=False,
         query_length=0,
     ):
+        self.attention_probs = []
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = (
             past_key_value[:2] if past_key_value is not None else None
@@ -401,6 +404,7 @@ class BertLayer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:-1]
+        self.attention_probs.append(self.attention.attention_probs.clone())
 
         present_key_value = self_attention_outputs[-1]
 
@@ -423,6 +427,7 @@ class BertLayer(nn.Module):
                 outputs = (
                     outputs + cross_attention_outputs[1:-1]
                 )  # add cross attentions if we output attention weights
+                self.attention_probs.append(self.crossattention.attention_probs.clone())
 
             layer_output = apply_chunking_to_forward(
                 self.feed_forward_chunk_query,
@@ -541,6 +546,9 @@ class BertEncoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+
+            if i == 0:
+                self.attention_probs = layer_module.attention_probs
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

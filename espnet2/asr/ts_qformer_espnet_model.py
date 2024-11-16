@@ -44,13 +44,26 @@ def get_similarity_weight(utt_list: List[str]):
     return weight
 
 
-def get_similarity_weight2(utt_list: List[str]):
+def get_similarity_weight_wsj2mix(utt_list: List[str]):
     """Get speaker similarity weight based on the utt_list. (for wsj2mix data)"""
     weight = torch.zeros(len(utt_list), len(utt_list))
     for i, utt_i in enumerate(utt_list):
         for j, utt_j in enumerate(utt_list):
             spk_i = utt_i.split("_")[-1][:3]
             spk_j = utt_j.split("_")[-1][:3]
+
+            weight[i, j] = int(spk_i == spk_j)
+
+    return weight
+
+
+def get_similarity_weight_ami(utt_list: List[str]):
+    """Get speaker similarity weight based on the utt_list. (for ami data)"""
+    weight = torch.zeros(len(utt_list), len(utt_list))
+    for i, utt_i in enumerate(utt_list):
+        for j, utt_j in enumerate(utt_list):
+            spk_i = utt_i.split("_")[3]
+            spk_j = utt_j.split("_")[3]
 
             weight[i, j] = int(spk_i == spk_j)
 
@@ -799,6 +812,7 @@ class TgtSpkQformerESPnetASRModel_V4(TgtSpkQformerESPnetASRModel_V2):
         contrastive_temp: float = 0.1,
         num_negatives: int = 10,
         is_wsj2mix: bool = False,
+        is_ami: bool = False,
         **kwargs,
     ):
         super().__init__(
@@ -834,6 +848,10 @@ class TgtSpkQformerESPnetASRModel_V4(TgtSpkQformerESPnetASRModel_V2):
         self.contrastive_temp = contrastive_temp
         self.num_negatives = num_negatives
         self.is_wsj2mix = is_wsj2mix
+        self.is_ami = is_ami
+
+        logging.info(f"Speaker prompt for encoder: {self.encoder.use_spk_prompt}")
+        logging.info(f"Speaker prompt for decoder: {self.decoder.use_spk_prompt}")
 
     def forward(
         self,
@@ -882,10 +900,12 @@ class TgtSpkQformerESPnetASRModel_V4(TgtSpkQformerESPnetASRModel_V2):
         text = text[:, : text_lengths.max()]
 
         # compute negtive sample probability, (batch, batch)
-        if not self.is_wsj2mix:
-            sim_weight = get_similarity_weight(kwargs["utt_id"])
+        if self.is_wsj2mix:
+            sim_weight = get_similarity_weight_wsj2mix(kwargs["utt_id"])
+        elif self.is_ami:
+            sim_weight = get_similarity_weight_ami(kwargs["utt_id"])
         else:
-            sim_weight = get_similarity_weight2(kwargs["utt_id"])
+            sim_weight = get_similarity_weight(kwargs["utt_id"])
         neg_weight = torch.ones_like(sim_weight).masked_fill_(sim_weight == 1, -10000)
         neg_weight = F.softmax(neg_weight, dim=1)
 
@@ -914,10 +934,11 @@ class TgtSpkQformerESPnetASRModel_V4(TgtSpkQformerESPnetASRModel_V2):
 
         # 2b. CTC branch
         if self.ctc_weight != 0.0:
+            prompt_encoder = self.encoder.use_spk_prompt
             prompt_lens = spk_prompt.size(1)
             loss_ctc, cer_ctc = self._calc_ctc_loss(
-                encoder_out[:, prompt_lens:],
-                encoder_out_lens - prompt_lens,
+                encoder_out[:, prompt_lens:] if prompt_encoder else encoder_out,
+                encoder_out_lens - prompt_lens if prompt_encoder else encoder_out_lens,
                 text,
                 text_lengths,
             )
@@ -939,7 +960,7 @@ class TgtSpkQformerESPnetASRModel_V4(TgtSpkQformerESPnetASRModel_V2):
         else:
             loss = self.ctc_weight * loss_ctc + (1 - self.ctc_weight) * loss_att
 
-        if self.contrastive_weight > 0:
+        if self.contrastive_weight > 0.0:
             loss = loss + self.contrastive_weight * loss_con
 
         # Collect Attn branch stats

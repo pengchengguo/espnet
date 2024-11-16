@@ -207,6 +207,7 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
         enroll_size: int = 512,
         adapter_method: str = "cat",
         adapter_normalize: bool = True,
+        adapter_layer: int = 1,
         modulate_bias: bool = False,
     ):
         super().__init__(
@@ -225,8 +226,9 @@ class TgtSpkWhisperEncoder(OpenAIWhisperEncoder):
             self.adapter = SpkAdapter(
                 enroll_size,
                 hidden_size,
-                adapter_method,
-                adapter_normalize,
+                adapter_method=adapter_method,
+                adapter_normalize=adapter_normalize,
+                adapter_layer=adapter_layer,
             )
         elif adapter_method == "cln":
             # init conditional layernorm layers, only for the first encoder layer
@@ -505,6 +507,7 @@ class SpkAdapter(nn.Module):
         hidden_size: int,
         adapter_method: str = "cat",
         adapter_normalize: bool = True,
+        adapter_layer: int = 1,
     ):
         super().__init__()
 
@@ -522,7 +525,7 @@ class SpkAdapter(nn.Module):
                 nn.Linear(linear_size, hidden_size),
             )
         elif adapter_method == "film":
-            self.adapter = FiLM(enroll_size, hidden_size)
+            self.adapter = FiLM(enroll_size, hidden_size, adapter_layer)
         else:
             raise NotImplementedError(f"Not supported adapter: {adapter_method}")
 
@@ -691,6 +694,7 @@ class QFormerTgtSpkWhisperEncoder_V2(OpenAIWhisperEncoder):
         do_pad_trim: bool = False,
         num_query_tokens: int = 1,
         num_hidden_layers: int = 2,
+        use_spk_prompt: bool = True,
     ):
         super().__init__(
             input_size,
@@ -718,6 +722,8 @@ class QFormerTgtSpkWhisperEncoder_V2(OpenAIWhisperEncoder):
             self.prompt_proj = nn.Linear(self.qformer.output_size(), self.encoder_size)
         else:
             self.prompt_proj = None
+
+        self.use_spk_prompt = use_spk_prompt
 
     def whisper_encode(
         self,
@@ -771,7 +777,9 @@ class QFormerTgtSpkWhisperEncoder_V2(OpenAIWhisperEncoder):
             enroll_embedding = self.prompt_proj(enroll_embedding)
 
         # 4. concat speaker prompt and input feats
-        x = torch.cat([spk_prompt, x], dim=1)
+        if self.use_spk_prompt:
+            x = torch.cat([spk_prompt, x], dim=1)
+
         # TODO (GPC): should have a layrnorm or not
         x = self.dropout(x)
         x_lens = x_lens + spk_prompt.size(1)

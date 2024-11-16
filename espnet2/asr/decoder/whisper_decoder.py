@@ -238,6 +238,7 @@ class QFormerTgtSpkWhisperDecoder_V2(OpenAIWhisperDecoder):
         download_dir: str = None,
         load_origin_token_embedding=False,
         startofprev_token: int = 50361,
+        use_spk_prompt: bool = True,
     ):
         super().__init__(
             vocab_size,
@@ -247,7 +248,9 @@ class QFormerTgtSpkWhisperDecoder_V2(OpenAIWhisperDecoder):
             download_dir,
             load_origin_token_embedding,
         )
+
         self.startofprev_token = startofprev_token
+        self.use_spk_prompt = use_spk_prompt
 
     def forward(
         self,
@@ -268,7 +271,8 @@ class QFormerTgtSpkWhisperDecoder_V2(OpenAIWhisperDecoder):
         tgt = self.decoders.token_embedding(tgt)
         startofprev = self.decoders.token_embedding(startofprev)
         # concat startofprev tokens, speaker prompts, and target tokens
-        tgt = torch.cat([startofprev, spk_prompt, tgt], dim=1)
+        if self.use_spk_prompt:
+            tgt = torch.cat([startofprev, spk_prompt, tgt], dim=1)
 
         tgt = tgt + self.decoders.positional_embedding[: tgt.size(1)]
         tgt = self.dropout(tgt)
@@ -285,7 +289,8 @@ class QFormerTgtSpkWhisperDecoder_V2(OpenAIWhisperDecoder):
         ).float()
 
         # only compute loss for the part of target tokens
-        x = x[:, 1 + spk_prompt.size(1) :].contiguous()
+        if self.use_spk_prompt:
+            x = x[:, 1 + spk_prompt.size(1) :].contiguous()
 
         return x, ys_in_lens
 
@@ -321,7 +326,12 @@ class QFormerTgtSpkWhisperDecoder_V2(OpenAIWhisperDecoder):
         tgt = self.decoders.token_embedding(tgt)
         startofprev = self.decoders.token_embedding(startofprev)
         # concat startofprev tokens, speaker prompts, and target tokens
-        tgt = torch.cat([startofprev, spk_prompt, tgt], dim=1)
+        if self.use_spk_prompt:
+            if spk_prompt.size(0) != tgt.size(0):
+                # for beam size > 1
+                spk_prompt = spk_prompt.expand(tgt.size(0), -1, -1)
+
+            tgt = torch.cat([startofprev, spk_prompt, tgt], dim=1)
 
         x = tgt + self.decoders.positional_embedding[: tgt.size(1)]
         x = self.dropout(x)
